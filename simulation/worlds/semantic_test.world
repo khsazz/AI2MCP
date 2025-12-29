@@ -1,0 +1,246 @@
+<?xml version="1.0" ?>
+<!--
+  Semantic Test World for MCP Integration
+  
+  A simple indoor environment with labeled objects for testing
+  semantic perception and GNN-based scene understanding.
+-->
+<sdf version="1.6">
+  <world name="semantic_test_world">
+    
+    <!-- Physics -->
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    
+    <!-- Lighting -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    
+    <!-- Ground Plane -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    
+    <!-- Room Walls -->
+    <!-- North Wall -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 5 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>10 0.1 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>10 0.1 1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- South Wall -->
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -5 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>10 0.1 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>10 0.1 1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- East Wall -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>5 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.1 10 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.1 10 1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- West Wall -->
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-5 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.1 10 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.1 10 1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Obstacles -->
+    <!-- Table -->
+    <model name="table_1">
+      <static>true</static>
+      <pose>2 2 0.4 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>1.2 0.8 0.8</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.2 0.8 0.8</size></box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.4 0.2 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Chair 1 -->
+    <model name="chair_1">
+      <static>true</static>
+      <pose>2 1 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.4 0.4 0.5</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.4 0.4 0.5</size></box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.6 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Chair 2 -->
+    <model name="chair_2">
+      <static>true</static>
+      <pose>2 3 0.25 0 0 3.14159</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.4 0.4 0.5</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.4 0.4 0.5</size></box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.6 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Bookshelf -->
+    <model name="bookshelf">
+      <static>true</static>
+      <pose>-3 3 0.75 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>1.0 0.3 1.5</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1.0 0.3 1.5</size></box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.3 0.2 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Cylindrical Obstacle (Plant pot) -->
+    <model name="plant_pot">
+      <static>true</static>
+      <pose>-2 -2 0.3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.25</radius>
+              <length>0.6</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.25</radius>
+              <length>0.6</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 0.2 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Goal marker (visual only, no collision) -->
+    <model name="goal_marker">
+      <static>true</static>
+      <pose>3 -3 0.01 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.02</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.5</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+  </world>
+</sdf>
+

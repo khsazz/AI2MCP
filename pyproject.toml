@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai2mcp"
+version = "0.1.0"
+description = "MCP-to-ROS2 Bridge for Decoupled Robotic Intelligence"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Khaled Sazzad"}
+]
+keywords = ["robotics", "mcp", "ros2", "llm", "gnn"]
+
+dependencies = [
+    # MCP Framework
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+    "httpx-sse>=0.4.0",
+    "uvicorn>=0.30.0",
+    "starlette>=0.38.0",
+    
+    # GNN & ML
+    "torch>=2.0.0",
+    "torch-geometric>=2.4.0",
+    "numpy>=1.24.0",
+    
+    # LeRobot Dataset
+    "lerobot>=0.1.0",
+    
+    # Perception
+    "ultralytics>=8.0.0",
+    "opencv-python>=4.8.0",
+    "Pillow>=10.0.0",
+    
+    # Utilities
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "pre-commit>=3.7.0",
+]
+
+[project.scripts]
+mcp-ros2-bridge = "mcp_ros2_bridge.server:main"
+gnn-service = "gnn_reasoner.service:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
