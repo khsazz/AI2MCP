@@ -302,3 +302,112 @@ class LeRobotGraphTransformer:
         """
         return [self.to_graph(state) for state in states]
 
+
+def compute_heuristic_predicates(
+    graph: Data,
+    near_threshold: float = 0.3,
+    contact_threshold: float = 0.05,
+    velocity_threshold: float = 0.1,
+    prev_positions: Tensor | None = None,
+) -> Tensor:
+    """Compute ground-truth predicate labels from graph structure using heuristics.
+
+    This generates supervision signal for training the RelationalGNN without
+    manual annotations. Predicates are derived from spatial relationships.
+
+    Args:
+        graph: PyG Data object from LeRobotGraphTransformer
+        near_threshold: Distance threshold for is_near predicate
+        contact_threshold: Distance threshold for is_contacting
+        velocity_threshold: Velocity threshold for approaching/retracting
+        prev_positions: Previous frame positions for motion-based predicates
+
+    Returns:
+        Tensor of shape (num_edges, num_predicates) with binary labels
+
+    Predicate order:
+        0: is_near
+        1: is_above
+        2: is_below
+        3: is_left_of
+        4: is_right_of
+        5: is_holding
+        6: is_contacting
+        7: is_approaching
+        8: is_retracting
+    """
+    num_predicates = 9
+    edge_index = graph.edge_index
+    num_edges = edge_index.shape[1]
+
+    if num_edges == 0:
+        return torch.zeros(0, num_predicates)
+
+    # Extract positions from node features (columns 2:5 are x, y, z)
+    positions = graph.x[:, 2:5]  # (num_nodes, 3)
+    node_types = graph.node_types if hasattr(graph, "node_types") else None
+
+    # Get source and target positions for each edge
+    src_pos = positions[edge_index[0]]  # (num_edges, 3)
+    tgt_pos = positions[edge_index[1]]  # (num_edges, 3)
+    diff = tgt_pos - src_pos  # (num_edges, 3)
+    distances = torch.norm(diff, dim=-1)  # (num_edges,)
+
+    labels = torch.zeros(num_edges, num_predicates)
+
+    # Spatial predicates
+    labels[:, 0] = (distances < near_threshold).float()  # is_near
+    labels[:, 1] = (diff[:, 2] > 0.05).float()  # is_above (target above source)
+    labels[:, 2] = (diff[:, 2] < -0.05).float()  # is_below
+    labels[:, 3] = (diff[:, 0] < -0.05).float()  # is_left_of
+    labels[:, 4] = (diff[:, 0] > 0.05).float()  # is_right_of
+
+    # is_holding: end-effector (type=1) near object (type=2)
+    if node_types is not None:
+        src_types = node_types[edge_index[0]]
+        tgt_types = node_types[edge_index[1]]
+        is_gripper_to_object = (src_types == 1) & (tgt_types == 2)
+        is_object_to_gripper = (src_types == 2) & (tgt_types == 1)
+        gripper_object_edge = is_gripper_to_object | is_object_to_gripper
+        labels[:, 5] = (gripper_object_edge & (distances < contact_threshold * 2)).float()
+
+    # is_contacting: very close
+    labels[:, 6] = (distances < contact_threshold).float()
+
+    # Motion-based predicates (if previous positions available)
+    if prev_positions is not None:
+        prev_src = prev_positions[edge_index[0]]
+        prev_tgt = prev_positions[edge_index[1]]
+        prev_distances = torch.norm(prev_tgt - prev_src, dim=-1)
+
+        velocity = distances - prev_distances  # negative = approaching
+
+        labels[:, 7] = (velocity < -velocity_threshold).float()  # is_approaching
+        labels[:, 8] = (velocity > velocity_threshold).float()  # is_retracting
+
+    return labels
+
+
+def add_predicate_labels(
+    graph: Data,
+    prev_graph: Data | None = None,
+    **kwargs,
+) -> Data:
+    """Add ground-truth predicate labels to a graph.
+
+    Args:
+        graph: Current frame graph
+        prev_graph: Previous frame graph (for motion predicates)
+        **kwargs: Passed to compute_heuristic_predicates
+
+    Returns:
+        Graph with added 'y' attribute containing predicate labels
+    """
+    prev_positions = None
+    if prev_graph is not None and hasattr(prev_graph, "x"):
+        prev_positions = prev_graph.x[:, 2:5]
+
+    labels = compute_heuristic_predicates(graph, prev_positions=prev_positions, **kwargs)
+    graph.y = labels
+    return graph
+
