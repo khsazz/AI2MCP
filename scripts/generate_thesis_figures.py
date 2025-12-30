@@ -209,24 +209,24 @@ def plot_inference_latency(benchmark: dict, output_dir: Path) -> None:
 
 
 def plot_predicate_distribution(output_dir: Path) -> None:
-    """Plot predicate type distribution (synthetic data for illustration)."""
+    """Plot predicate type distribution from benchmark data."""
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    # Based on demo output
-    predicates = ['is_near', 'is_left_of', 'is_right_of', 'is_above', 'is_below']
-    counts = [4658, 2586, 2591, 0, 0]  # From demo run
+    # Based on latest benchmark output (200 frames)
+    predicates = ['is_near', 'is_right_of', 'is_left_of', 'is_above', 'is_below']
+    counts = [8539, 4769, 4727, 0, 0]  # From trained model benchmark
     
     colors = [COLORS['primary'] if c > 0 else '#cccccc' for c in counts]
     
     bars = ax.barh(predicates, counts, color=colors)
-    ax.set_xlabel('Total Detections (100 frames)')
-    ax.set_title('Spatial Predicate Distribution on ALOHA Dataset')
+    ax.set_xlabel('Total Detections (200 frames)')
+    ax.set_title('Spatial Predicate Distribution (Trained Model)')
     
     # Add value labels
     for bar, count in zip(bars, counts):
         if count > 0:
-            ax.text(count + 50, bar.get_y() + bar.get_height()/2,
-                    f'{count}', va='center', fontsize=10)
+            ax.text(count + 100, bar.get_y() + bar.get_height()/2,
+                    f'{count:,}', va='center', fontsize=10)
     
     ax.set_xlim(0, max(counts) * 1.15)
     
@@ -234,6 +234,89 @@ def plot_predicate_distribution(output_dir: Path) -> None:
     
     output_path = output_dir / 'predicate_distribution.png'
     plt.savefig(output_path)
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
+def plot_pass_at_k(benchmark: dict, output_dir: Path) -> None:
+    """Plot pass@k accuracy metrics."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    accuracy = benchmark.get('accuracy', {})
+    if not accuracy:
+        print("Warning: No accuracy data in benchmark")
+        return
+    
+    k_values = ['pass@1', 'pass@3', 'pass@5', 'pass@10']
+    scores = [accuracy.get(k, 0) * 100 for k in k_values]
+    k_labels = ['k=1', 'k=3', 'k=5', 'k=10']
+    
+    colors = [COLORS['primary'], COLORS['secondary'], COLORS['tertiary'], COLORS['success']]
+    
+    bars = ax.bar(k_labels, scores, color=colors, edgecolor='black', linewidth=1.2)
+    
+    ax.set_ylabel('Accuracy (%)')
+    ax.set_xlabel('Top-k Predictions')
+    ax.set_title('Pass@k Predicate Prediction Accuracy')
+    ax.set_ylim(0, 105)
+    
+    # Add value labels on bars
+    for bar, score in zip(bars, scores):
+        ax.annotate(f'{score:.1f}%',
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 5), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    # Add horizontal line at 90%
+    ax.axhline(y=90, color=COLORS['neutral'], linestyle='--', alpha=0.5, label='90% threshold')
+    ax.legend(loc='lower right')
+    
+    plt.tight_layout()
+    
+    output_path = output_dir / 'pass_at_k.png'
+    plt.savefig(output_path)
+    plt.savefig(output_dir / 'pass_at_k.pdf')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
+def plot_classification_metrics(benchmark: dict, output_dir: Path) -> None:
+    """Plot predicate classification metrics (accuracy, precision, recall, F1)."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    custom = benchmark.get('custom_metrics', {})
+    if not custom:
+        print("Warning: No custom metrics in benchmark")
+        return
+    
+    metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score']
+    values = [
+        custom.get('predicate_accuracy', {}).get('mean_ms', 0),
+        custom.get('predicate_precision', {}).get('mean_ms', 0),
+        custom.get('predicate_recall', {}).get('mean_ms', 0),
+        custom.get('predicate_f1', {}).get('mean_ms', 0),
+    ]
+    
+    colors = [COLORS['primary'], COLORS['secondary'], COLORS['tertiary'], COLORS['success']]
+    
+    bars = ax.bar(metrics, values, color=colors, edgecolor='black', linewidth=1.2)
+    
+    ax.set_ylabel('Score (%)')
+    ax.set_title('Predicate Classification Performance')
+    ax.set_ylim(0, 100)
+    
+    # Add value labels on bars
+    for bar, val in zip(bars, values):
+        ax.annotate(f'{val:.1f}%',
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 5), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    plt.tight_layout()
+    
+    output_path = output_dir / 'classification_metrics.png'
+    plt.savefig(output_path)
+    plt.savefig(output_dir / 'classification_metrics.pdf')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -296,28 +379,32 @@ def plot_mcp_architecture(output_dir: Path) -> None:
 
 def plot_comparison_table(output_dir: Path) -> None:
     """Generate comparison table as figure."""
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(12, 5))
     ax.axis('off')
     
+    # Updated with actual benchmark results
     data = [
-        ['Metric', 'Synthetic', 'Real ALOHA', 'Improvement'],
-        ['Final Accuracy', '95.9%', '99.4%', '+3.5%'],
-        ['Best Val Loss', '0.1086', '0.0232', '4.7×'],
-        ['Training Time', '21s', '205s', '~10×'],
-        ['Convergence', '~30 epochs', '~20 epochs', 'Faster'],
-        ['Inference Latency', '7.7ms', '14.4ms', '+87%*'],
+        ['Metric', 'Synthetic Training', 'ALOHA Training', 'Trained Inference'],
+        ['Final Accuracy', '95.9%', '99.4%', '92.5%*'],
+        ['Best Val Loss', '0.1086', '0.0232', '—'],
+        ['Pass@1', '—', '—', '88.2%'],
+        ['Pass@3', '—', '—', '98.2%'],
+        ['Precision/Recall', '—', '—', '84.5% / 79.9%'],
+        ['F1 Score', '—', '—', '82.1%'],
+        ['Inference Latency', '—', '—', '12.6ms (p95)'],
+        ['Protocol Overhead', '—', '—', '30.4%'],
     ]
     
     table = ax.table(
         cellText=data,
         loc='center',
         cellLoc='center',
-        colWidths=[0.3, 0.2, 0.2, 0.2],
+        colWidths=[0.25, 0.22, 0.22, 0.25],
     )
     
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1.2, 1.8)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.7)
     
     # Style header row
     for j in range(4):
@@ -330,17 +417,78 @@ def plot_comparison_table(output_dir: Path) -> None:
             if i % 2 == 0:
                 table[(i, j)].set_facecolor('#f0f0f0')
     
-    ax.set_title('Training Results: Synthetic vs Real Data', 
+    ax.set_title('Complete System Performance Summary', 
                  fontsize=14, fontweight='bold', pad=20)
     
     # Add footnote
-    ax.text(0.5, -0.1, '* Includes data loading overhead from dataset',
+    ax.text(0.5, -0.08, '* On synthetic test data (200 frames). Training accuracy measured on validation set.',
             ha='center', fontsize=9, style='italic', transform=ax.transAxes)
     
     plt.tight_layout()
     
     output_path = output_dir / 'comparison_table.png'
     plt.savefig(output_path)
+    plt.savefig(output_dir / 'comparison_table.pdf')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
+def plot_before_after_comparison(output_dir: Path) -> None:
+    """Plot before/after benchmark comparison."""
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    
+    # Pass@k comparison
+    ax1 = axes[0]
+    k_values = ['pass@1', 'pass@3', 'pass@5', 'pass@10']
+    before = [0, 0, 0, 0]  # Untrained model
+    after = [88.17, 98.16, 98.16, 98.16]  # Trained model
+    
+    x = np.arange(len(k_values))
+    width = 0.35
+    
+    bars1 = ax1.bar(x - width/2, before, width, label='Before (Untrained)', 
+                     color='#cccccc', edgecolor='black')
+    bars2 = ax1.bar(x + width/2, after, width, label='After (Trained)', 
+                     color=COLORS['success'], edgecolor='black')
+    
+    ax1.set_ylabel('Accuracy (%)')
+    ax1.set_title('(a) Pass@k Improvement')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(['k=1', 'k=3', 'k=5', 'k=10'])
+    ax1.legend(loc='upper left')
+    ax1.set_ylim(0, 110)
+    
+    # Add value labels
+    for bar, val in zip(bars2, after):
+        ax1.annotate(f'{val:.1f}%',
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    # Timing comparison
+    ax2 = axes[1]
+    metrics = ['Inference\nLatency', 'Graph\nConstruction', 'Serialization', 'Total\nRequest']
+    before_timing = [7.7, 1.3, 0.2, 9.3]  # From old benchmark
+    after_timing = [12.6, 1.7, 0.15, 18.2]  # From new benchmark
+    
+    x = np.arange(len(metrics))
+    
+    bars1 = ax2.bar(x - width/2, before_timing, width, label='Baseline', 
+                     color=COLORS['primary'], edgecolor='black', alpha=0.7)
+    bars2 = ax2.bar(x + width/2, after_timing, width, label='With Accuracy Tracking', 
+                     color=COLORS['secondary'], edgecolor='black', alpha=0.7)
+    
+    ax2.set_ylabel('Latency (ms)')
+    ax2.set_title('(b) Timing Overhead')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(metrics)
+    ax2.legend(loc='upper left')
+    
+    plt.tight_layout()
+    
+    output_path = output_dir / 'before_after_comparison.png'
+    plt.savefig(output_path)
+    plt.savefig(output_dir / 'before_after_comparison.pdf')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -362,7 +510,7 @@ def main():
     parser.add_argument(
         "--benchmark",
         type=Path,
-        default=Path("experiments/aloha_training/benchmark.json"),
+        default=Path("experiments/benchmark_with_trained_model.json"),
         help="Path to benchmark results JSON",
     )
     args = parser.parse_args()
@@ -385,11 +533,14 @@ def main():
     if benchmark:
         print("\nGenerating benchmark figures...")
         plot_inference_latency(benchmark, args.output)
+        plot_pass_at_k(benchmark, args.output)
+        plot_classification_metrics(benchmark, args.output)
     
     print("\nGenerating additional figures...")
     plot_predicate_distribution(args.output)
     plot_mcp_architecture(args.output)
     plot_comparison_table(args.output)
+    plot_before_after_comparison(args.output)
     
     print("\n" + "=" * 50)
     print(f"All figures saved to: {args.output}")

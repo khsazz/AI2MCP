@@ -1,0 +1,115 @@
+{
+  "name": "lerobot_pipeline",
+  "session_duration_seconds": 3.77,
+  "timing": {
+    "inference_latency": {
+      "name": "inference_latency",
+      "count": 200,
+      "mean_ms": 12.637,
+      "std_ms": 14.584,
+      "min_ms": 10.459,
+      "max_ms": 218.187,
+      "median_ms": 11.525,
+      "p95_ms": 12.656,
+      "p99_ms": 14.479
+    },
+    "serialization_time": {
+      "name": "serialization_time",
+      "count": 200,
+      "mean_ms": 0.146,
+      "std_ms": 0.019,
+      "min_ms": 0.113,
+      "max_ms": 0.227,
+      "median_ms": 0.142,
+      "p95_ms": 0.18,
+      "p99_ms": 0.224
+    },
+    "deserialization_time": {
+      "name": "deserialization_time",
+      "count": 0,
+      "mean_ms": 0.0,
+      "std_ms": 0.0,
+      "min_ms": 0.0,
+      "max_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "total_request_time": {
+      "name": "total_request_time",
+      "count": 200,
+      "mean_ms": 18.147,
+      "std_ms": 15.081,
+      "min_ms": 15.076,
+      "max_ms": 230.444,
+      "median_ms": 17.007,
+      "p95_ms": 18.629,
+      "p99_ms": 20.589
+    },
+    "graph_construction_time": {
+      "name": "graph_construction_time",
+      "count": 200,
+      "mean_ms": 1.695,
+      "std_ms": 0.116,
+      "min_ms": 1.333,
+      "max_ms": 2.228,
+      "median_ms": 1.689,
+      "p95_ms": 1.849,
+      "p99_ms": 2.094
+    }
+  },
+  "custom_metrics": {
+    "predicate_accuracy": {
+      "name": "predicate_accuracy",
+      "count": 1,
+      "mean_ms": 92.48,
+      "std_ms": 0.0,
+      "min_ms": 92.48,
+      "max_ms": 92.48,
+      "median_ms": 92.48,
+      "p95_ms": 92.48,
+      "p99_ms": 92.48
+    },
+    "predicate_precision": {
+      "name": "predicate_precision",
+      "count": 1,
+      "mean_ms": 84.458,
+      "std_ms": 0.0,
+      "min_ms": 84.458,
+      "max_ms": 84.458,
+      "median_ms": 84.458,
+      "p95_ms": 84.458,
+      "p99_ms": 84.458
+    },
+    "predicate_recall": {
+      "name": "predicate_recall",
+      "count": 1,
+      "mean_ms": 79.908,
+      "std_ms": 0.0,
+      "min_ms": 79.908,
+      "max_ms": 79.908,
+      "median_ms": 79.908,
+      "p95_ms": 79.908,
+      "p99_ms": 79.908
+    },
+    "predicate_f1": {
+      "name": "predicate_f1",
+      "count": 1,
+      "mean_ms": 82.12,
+      "std_ms": 0.0,
+      "min_ms": 82.12,
+      "max_ms": 82.12,
+      "median_ms": 82.12,
+      "p95_ms": 82.12,
+      "p99_ms": 82.12
+    }
+  },
+  "accuracy": {
+    "pass@1": 0.8817,
+    "pass@3": 0.9816,
+    "pass@5": 0.9816,
+    "pass@10": 0.9816
+  },
+  "total_predictions": 9744,
+  "protocol_overhead_percent": 30.36
+}

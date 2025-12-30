@@ -188,6 +188,7 @@ def run_pipeline(
     print(f"\n[2/4] Processing {num_frames} frames...")
     prev_graph = None
     all_contexts = []
+    frame_stats = {}  # Track predicate accuracy across frames
 
     for i in range(min(num_frames, len(data_manager))):
         frame_start = time.perf_counter()
@@ -209,9 +210,49 @@ def run_pipeline(
         # GNN inference
         inference_start = time.perf_counter()
         with torch.no_grad():
+            # Get raw predictions for accuracy calculation
+            outputs = gnn(graph)
+            pred_probs = outputs["predicate_logits"].sigmoid()  # [num_edges, num_predicates]
+            pred_binary = (pred_probs > 0.3).float()
+            
             # Use lower threshold for interaction predicates (they're rare)
             context = gnn.to_world_context(graph, threshold=0.3)
         benchmark.log_inference_latency((time.perf_counter() - inference_start) * 1000)
+        
+        # Log predicate accuracy if ground-truth labels exist
+        if hasattr(graph, "y") and graph.y is not None:
+            gt_labels = graph.y.to(device)
+            
+            # Per-predicate accuracy tracking
+            if "predicate_correct" not in frame_stats:
+                frame_stats["predicate_correct"] = 0
+                frame_stats["predicate_total"] = 0
+                frame_stats["predicate_tp"] = 0
+                frame_stats["predicate_fp"] = 0
+                frame_stats["predicate_fn"] = 0
+            
+            # Compute binary accuracy
+            correct = (pred_binary == gt_labels).sum().item()
+            total = gt_labels.numel()
+            frame_stats["predicate_correct"] += correct
+            frame_stats["predicate_total"] += total
+            
+            # Compute TP, FP, FN for F1
+            tp = ((pred_binary == 1) & (gt_labels == 1)).sum().item()
+            fp = ((pred_binary == 1) & (gt_labels == 0)).sum().item()
+            fn = ((pred_binary == 0) & (gt_labels == 1)).sum().item()
+            frame_stats["predicate_tp"] += tp
+            frame_stats["predicate_fp"] += fp
+            frame_stats["predicate_fn"] += fn
+            
+            # Log for pass@k: treat active predicates as a set
+            # predicted = list of predicate indices that are predicted as True
+            # expert = list of predicate indices that are actually True
+            for edge_idx in range(pred_binary.shape[0]):
+                pred_active = pred_binary[edge_idx].nonzero(as_tuple=True)[0].tolist()
+                gt_active = gt_labels[edge_idx].nonzero(as_tuple=True)[0].tolist()
+                if gt_active:  # Only log if there are ground-truth predicates
+                    benchmark.log_prediction(pred_active, gt_active)
 
         # Serialize to JSON (simulating MCP response)
         serialize_start = time.perf_counter()
@@ -238,6 +279,29 @@ def run_pipeline(
 
     # Compute aggregate stats
     print(f"\n[3/4] Computing metrics...")
+    
+    # Compute predicate classification metrics
+    if frame_stats.get("predicate_total", 0) > 0:
+        accuracy = frame_stats["predicate_correct"] / frame_stats["predicate_total"]
+        tp = frame_stats["predicate_tp"]
+        fp = frame_stats["predicate_fp"]
+        fn = frame_stats["predicate_fn"]
+        
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        
+        print(f"\n  Predicate Classification Metrics:")
+        print(f"    Accuracy:  {accuracy:.4f} ({frame_stats['predicate_correct']}/{frame_stats['predicate_total']})")
+        print(f"    Precision: {precision:.4f}")
+        print(f"    Recall:    {recall:.4f}")
+        print(f"    F1 Score:  {f1:.4f}")
+        
+        # Store in benchmark for export
+        benchmark.log_custom_metric("predicate_accuracy", accuracy * 100)
+        benchmark.log_custom_metric("predicate_precision", precision * 100)
+        benchmark.log_custom_metric("predicate_recall", recall * 100)
+        benchmark.log_custom_metric("predicate_f1", f1 * 100)
 
     # Sample predicate statistics
     total_spatial = sum(len(c["spatial_predicates"]) for c in all_contexts)
@@ -378,6 +442,20 @@ def main():
 
     if metrics.get("protocol_overhead_percent"):
         print(f"Protocol overhead:     {metrics['protocol_overhead_percent']:.1f}%")
+    
+    # Print accuracy metrics if available
+    if metrics.get("accuracy", {}).get("pass@1", 0) > 0 or metrics.get("total_predictions", 0) > 0:
+        print(f"\nAccuracy Metrics:")
+        for k, v in metrics.get("accuracy", {}).items():
+            print(f"  {k}: {v:.4f}")
+        print(f"  Total predictions logged: {metrics.get('total_predictions', 0)}")
+    
+    # Print custom metrics (predicate F1, etc.)
+    if metrics.get("custom_metrics"):
+        print(f"\nPredicate Classification:")
+        for name, stats in metrics["custom_metrics"].items():
+            if stats["count"] > 0:
+                print(f"  {name}: {stats['mean_ms']:.2f}%")
 
     return 0
 
