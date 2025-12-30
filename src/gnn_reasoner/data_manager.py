@@ -14,7 +14,7 @@ import torch
 from torch import Tensor
 
 if TYPE_CHECKING:
-    from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 
 @dataclass
@@ -72,7 +72,12 @@ class DataManager:
 
     def _load_dataset(self) -> LeRobotDataset:
         """Load the LeRobot dataset."""
-        from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+        try:
+            # New LeRobot structure (v0.2+)
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+        except ImportError:
+            # Fallback to old structure (v0.1.x)
+            from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
         # LeRobotDataset handles streaming internally via HF datasets
         dataset = LeRobotDataset(self.repo_id)

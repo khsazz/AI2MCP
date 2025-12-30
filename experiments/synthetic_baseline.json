@@ -1,0 +1,70 @@
+{
+  "name": "lerobot_pipeline",
+  "session_duration_seconds": 0.93,
+  "timing": {
+    "inference_latency": {
+      "name": "inference_latency",
+      "count": 100,
+      "mean_ms": 7.717,
+      "std_ms": 6.511,
+      "min_ms": 4.394,
+      "max_ms": 55.179,
+      "median_ms": 5.387,
+      "p95_ms": 15.36,
+      "p99_ms": 31.198
+    },
+    "serialization_time": {
+      "name": "serialization_time",
+      "count": 100,
+      "mean_ms": 0.223,
+      "std_ms": 0.041,
+      "min_ms": 0.175,
+      "max_ms": 0.39,
+      "median_ms": 0.21,
+      "p95_ms": 0.324,
+      "p99_ms": 0.356
+    },
+    "deserialization_time": {
+      "name": "deserialization_time",
+      "count": 0,
+      "mean_ms": 0.0,
+      "std_ms": 0.0,
+      "min_ms": 0.0,
+      "max_ms": 0.0,
+      "median_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0
+    },
+    "total_request_time": {
+      "name": "total_request_time",
+      "count": 100,
+      "mean_ms": 9.256,
+      "std_ms": 6.541,
+      "min_ms": 5.701,
+      "max_ms": 56.586,
+      "median_ms": 6.911,
+      "p95_ms": 16.777,
+      "p99_ms": 33.028
+    },
+    "graph_construction_time": {
+      "name": "graph_construction_time",
+      "count": 100,
+      "mean_ms": 1.309,
+      "std_ms": 0.4,
+      "min_ms": 1.073,
+      "max_ms": 3.554,
+      "median_ms": 1.212,
+      "p95_ms": 1.728,
+      "p99_ms": 3.061
+    }
+  },
+  "custom_metrics": {},
+  "accuracy": {
+    "pass@1": 0.0,
+    "pass@3": 0.0,
+    "pass@5": 0.0,
+    "pass@10": 0.0
+  },
+  "total_predictions": 0,
+  "protocol_overhead_percent": 16.62
+}
