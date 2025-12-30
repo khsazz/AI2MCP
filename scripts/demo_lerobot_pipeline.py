@@ -94,10 +94,38 @@ def create_synthetic_data_manager(num_frames: int = 100, num_episodes: int = 2):
     return SyntheticDataManager(num_frames, num_episodes)
 
 
+def load_trained_model(
+    model: torch.nn.Module,
+    checkpoint_path: Path,
+    device: torch.device,
+) -> tuple[torch.nn.Module, dict]:
+    """Load trained weights into model.
+    
+    Args:
+        model: RelationalGNN instance
+        checkpoint_path: Path to .pt checkpoint file
+        device: Target device
+        
+    Returns:
+        Tuple of (model with loaded weights, checkpoint metadata)
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+    
+    metadata = {
+        "epoch": checkpoint.get("epoch", "unknown"),
+        "val_loss": checkpoint.get("val_loss", "unknown"),
+        "profile": checkpoint.get("profile", "unknown"),
+    }
+    return model, metadata
+
+
 def run_pipeline(
     data_manager,
     num_frames: int,
     verbose: bool = False,
+    model_path: Path | None = None,
 ) -> dict:
     """Run the full GNN inference pipeline.
 
@@ -105,6 +133,7 @@ def run_pipeline(
         data_manager: DataManager or SyntheticDataManager instance
         num_frames: Number of frames to process
         verbose: Print per-frame output
+        model_path: Optional path to trained model checkpoint
 
     Returns:
         Benchmark metrics dictionary
@@ -124,15 +153,36 @@ def run_pipeline(
     print(f"Frames to process: {num_frames}")
     print(f"{'='*60}\n")
 
+    # Device setup
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Initialize components
     print("[1/4] Initializing components...")
     transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
     gnn = RelationalGNN(hidden_dim=128, num_layers=3)
     benchmark = BenchmarkLogger("lerobot_pipeline")
 
+    # Load trained weights if provided
+    if model_path and model_path.exists():
+        gnn, checkpoint_meta = load_trained_model(gnn, model_path, device)
+        print(f"  - Loaded trained model: {model_path.name}")
+        print(f"    Epoch: {checkpoint_meta['epoch']}, Val Loss: {checkpoint_meta['val_loss']:.4f}")
+        model_status = "trained"
+    else:
+        gnn.eval()
+        if model_path:
+            print(f"  - Warning: Model not found at {model_path}, using untrained")
+        else:
+            print(f"  - Using untrained model (random weights)")
+        model_status = "untrained"
+    
+    gnn = gnn.to(device)
+
     print(f"  - Graph Transformer: {transformer.num_joints} joints")
     print(f"  - RelationalGNN: {sum(p.numel() for p in gnn.parameters())} parameters")
     print(f"  - Predicate classes: {gnn.num_predicates}")
+    print(f"  - Model status: {model_status}")
+    print(f"  - Device: {device}")
 
     # Process frames
     print(f"\n[2/4] Processing {num_frames} frames...")
@@ -148,13 +198,19 @@ def run_pipeline(
         # Transform to graph
         graph_start = time.perf_counter()
         graph = transformer.to_graph(state)
+        # Add labels on CPU first (prev_graph is still on CPU)
         graph = add_predicate_labels(graph, prev_graph)
+        # Store CPU copy for next iteration's prev_graph
+        graph_cpu = graph.clone()
+        # Move to GPU for inference
+        graph = graph.to(device)
         benchmark.log_graph_construction_time((time.perf_counter() - graph_start) * 1000)
 
         # GNN inference
         inference_start = time.perf_counter()
         with torch.no_grad():
-            context = gnn.to_world_context(graph, threshold=0.5)
+            # Use lower threshold for interaction predicates (they're rare)
+            context = gnn.to_world_context(graph, threshold=0.3)
         benchmark.log_inference_latency((time.perf_counter() - inference_start) * 1000)
 
         # Serialize to JSON (simulating MCP response)
@@ -168,7 +224,7 @@ def run_pipeline(
         benchmark.log_total_request_time((time.perf_counter() - frame_start) * 1000)
 
         all_contexts.append(context)
-        prev_graph = graph
+        prev_graph = graph_cpu  # Use CPU copy for next iteration
 
         if verbose and i < 5:  # Print first 5 frames
             print(f"\n  Frame {i}:")
@@ -186,6 +242,19 @@ def run_pipeline(
     # Sample predicate statistics
     total_spatial = sum(len(c["spatial_predicates"]) for c in all_contexts)
     total_interaction = sum(len(c["interaction_predicates"]) for c in all_contexts)
+    
+    # Debug: Show predicate type breakdown if verbose
+    if verbose and all_contexts:
+        from collections import Counter
+        spatial_types = Counter()
+        interaction_types = Counter()
+        for c in all_contexts:
+            for p in c["spatial_predicates"]:
+                spatial_types[p["predicate"]] += 1
+            for p in c["interaction_predicates"]:
+                interaction_types[p["predicate"]] += 1
+        print(f"\n  Spatial breakdown: {dict(spatial_types)}")
+        print(f"  Interaction breakdown: {dict(interaction_types)}")
 
     print(f"  - Total spatial predicates detected: {total_spatial}")
     print(f"  - Total interaction predicates detected: {total_interaction}")
@@ -236,7 +305,26 @@ def main():
         default=None,
         help="Save benchmark results to JSON file",
     )
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=None,
+        help="Path to trained model checkpoint (.pt file)",
+    )
     args = parser.parse_args()
+    
+    # Auto-detect model if not specified
+    if args.model is None:
+        # Check common locations
+        default_paths = [
+            Path("experiments/aloha_training/best_model.pt"),
+            Path("experiments/training/best_model.pt"),
+        ]
+        for path in default_paths:
+            if path.exists():
+                args.model = path
+                print(f"Auto-detected trained model: {path}")
+                break
 
     # Create data manager
     if args.synthetic:
@@ -267,6 +355,7 @@ def main():
         data_manager=data_manager,
         num_frames=args.frames,
         verbose=args.verbose,
+        model_path=args.model,
     )
 
     # Save results if requested

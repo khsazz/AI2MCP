@@ -24,14 +24,15 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from mcp_ros2_bridge.ros_node import ROS2Bridge
-from mcp_ros2_bridge.tools import register_tools, register_prediction_tools
-from mcp_ros2_bridge.resources import register_resources, register_lerobot_resources
+from mcp_ros2_bridge.tools import register_tools
+from mcp_ros2_bridge.resources import register_resources
 
 logger = structlog.get_logger()
 
 # LeRobot integration flag - set via environment or constructor
 LEROBOT_ENABLED = os.environ.get("LEROBOT_ENABLED", "false").lower() == "true"
 LEROBOT_REPO_ID = os.environ.get("LEROBOT_REPO_ID", "lerobot/aloha_static_coffee")
+LEROBOT_MODEL_PATH = os.environ.get("LEROBOT_MODEL_PATH", "")
 
 
 class MCPRos2Server:
@@ -48,11 +49,13 @@ class MCPRos2Server:
         port: int = 8080,
         enable_lerobot: bool = False,
         lerobot_repo_id: str | None = None,
+        lerobot_model_path: str | None = None,
     ):
         self.host = host
         self.port = port
         self.enable_lerobot = enable_lerobot or LEROBOT_ENABLED
         self.lerobot_repo_id = lerobot_repo_id or LEROBOT_REPO_ID
+        self.lerobot_model_path = lerobot_model_path or LEROBOT_MODEL_PATH or None
 
         self.mcp_server = Server("mcp-ros2-bridge")
         self.ros_bridge: ROS2Bridge | None = None
@@ -70,19 +73,31 @@ class MCPRos2Server:
         self.ros_bridge = ROS2Bridge()
         await self.ros_bridge.initialize()
 
-        # Register core ROS 2 tools and resources
-        register_tools(self.mcp_server, self.ros_bridge)
-        register_resources(self.mcp_server, self.ros_bridge)
-
-        # Optionally initialize LeRobot integration
+        # Optionally initialize LeRobot integration first (for tool registration)
         if self.enable_lerobot:
             await self._initialize_lerobot()
+
+        # Register all tools (including prediction tools if LeRobot enabled)
+        register_tools(
+            self.mcp_server, 
+            self.ros_bridge, 
+            prediction_tools_manager=self._lerobot_tools_manager
+        )
+        
+        # Register all resources (including LeRobot resources if enabled)
+        register_resources(
+            self.mcp_server, 
+            self.ros_bridge,
+            lerobot_resource_manager=self._lerobot_resource_manager
+        )
 
         logger.info("MCP server initialized with ROS 2 bridge")
 
     async def _initialize_lerobot(self) -> None:
         """Initialize LeRobot dataset integration."""
         try:
+            from pathlib import Path
+            import torch
             from gnn_reasoner import DataManager, LeRobotGraphTransformer, ALOHA_KINEMATIC_CHAIN
             from gnn_reasoner.model import RelationalGNN
             from mcp_ros2_bridge.resources.lerobot_state import LeRobotResourceManager
@@ -95,7 +110,47 @@ class MCPRos2Server:
             graph_transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
             gnn_model = RelationalGNN()
 
-            # Create managers
+            # Load trained model weights if available
+            model_loaded = False
+            if self.lerobot_model_path:
+                model_path = Path(self.lerobot_model_path)
+                if model_path.exists():
+                    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+                    gnn_model.load_state_dict(checkpoint["model_state_dict"])
+                    gnn_model = gnn_model.to(device)
+                    gnn_model.eval()
+                    logger.info(
+                        "Loaded trained model",
+                        path=str(model_path),
+                        epoch=checkpoint.get("epoch", "unknown"),
+                        val_loss=checkpoint.get("val_loss", "unknown"),
+                    )
+                    model_loaded = True
+                else:
+                    logger.warning("Model path not found", path=str(model_path))
+            
+            # Try auto-detect if no model specified
+            if not model_loaded:
+                auto_paths = [
+                    Path("experiments/aloha_training/best_model.pt"),
+                    Path("experiments/training/best_model.pt"),
+                ]
+                for auto_path in auto_paths:
+                    if auto_path.exists():
+                        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                        checkpoint = torch.load(auto_path, map_location=device, weights_only=False)
+                        gnn_model.load_state_dict(checkpoint["model_state_dict"])
+                        gnn_model = gnn_model.to(device)
+                        gnn_model.eval()
+                        logger.info("Auto-loaded trained model", path=str(auto_path))
+                        model_loaded = True
+                        break
+            
+            if not model_loaded:
+                logger.info("Using untrained GNN model (random weights)")
+
+            # Create managers (registration happens in initialize())
             self._lerobot_resource_manager = LeRobotResourceManager(
                 data_manager, graph_transformer, gnn_model
             )
@@ -103,11 +158,7 @@ class MCPRos2Server:
                 data_manager, graph_transformer, gnn_model
             )
 
-            # Register with MCP server
-            register_lerobot_resources(self.mcp_server, self._lerobot_resource_manager)
-            register_prediction_tools(self.mcp_server, self._lerobot_tools_manager)
-
-            logger.info("LeRobot integration initialized successfully")
+            logger.info("LeRobot components initialized successfully")
 
         except ImportError as e:
             logger.warning("LeRobot dependencies not available", error=str(e))
@@ -184,6 +235,11 @@ def main() -> None:
         default=None,
         help="LeRobot dataset repo ID (e.g., lerobot/aloha_static_coffee)",
     )
+    parser.add_argument(
+        "--lerobot-model",
+        default=None,
+        help="Path to trained GNN model checkpoint (.pt file)",
+    )
     args = parser.parse_args()
 
     server = MCPRos2Server(
@@ -191,6 +247,7 @@ def main() -> None:
         port=args.port,
         enable_lerobot=args.lerobot,
         lerobot_repo_id=args.lerobot_repo,
+        lerobot_model_path=args.lerobot_model,
     )
     app = server.create_app()
 

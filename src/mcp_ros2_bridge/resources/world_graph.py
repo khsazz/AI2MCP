@@ -10,64 +10,55 @@ import json
 import math
 from typing import TYPE_CHECKING, Any
 
-from mcp.server import Server
 from mcp.types import Resource, TextContent
 
 if TYPE_CHECKING:
     from mcp_ros2_bridge.ros_node import ROS2Bridge
 
 
-def register_world_graph_resource(server: Server, ros_bridge: ROS2Bridge) -> None:
-    """Register world graph resource with MCP server."""
-
-    existing_list = server._resource_handlers.get("list_resources")
-
-    @server.list_resources()
-    async def list_world_graph_resources() -> list[Resource]:
-        """List world graph resources."""
-        existing_resources = await existing_list() if existing_list else []
-        graph_resources = [
-            Resource(
-                uri="robot://world_graph",
-                name="World Graph",
-                description=(
-                    "Semantic scene graph with entities (nodes) and relations (edges). "
-                    "Processed by GNN for structured environment understanding."
-                ),
-                mimeType="application/json",
+def get_world_graph_resources() -> list[Resource]:
+    """Get list of world graph resources."""
+    return [
+        Resource(
+            uri="robot://world_graph",
+            name="World Graph",
+            description=(
+                "Semantic scene graph with entities (nodes) and relations (edges). "
+                "Processed by GNN for structured environment understanding."
             ),
-            Resource(
-                uri="robot://world_graph/entities",
-                name="Detected Entities",
-                description="List of detected entities (robot, obstacles, landmarks) with attributes",
-                mimeType="application/json",
-            ),
-            Resource(
-                uri="robot://world_graph/relations",
-                name="Entity Relations",
-                description="Spatial and semantic relations between entities",
-                mimeType="application/json",
-            ),
-        ]
-        return existing_resources + graph_resources
+            mimeType="application/json",
+        ),
+        Resource(
+            uri="robot://world_graph/entities",
+            name="Detected Entities",
+            description="List of detected entities (robot, obstacles, landmarks) with attributes",
+            mimeType="application/json",
+        ),
+        Resource(
+            uri="robot://world_graph/relations",
+            name="Entity Relations",
+            description="Spatial and semantic relations between entities",
+            mimeType="application/json",
+        ),
+    ]
 
-    @server.read_resource()
-    async def read_world_graph_resource(uri: str) -> list[TextContent]:
-        """Read world graph resources."""
-        state = ros_bridge.state
 
-        if uri == "robot://world_graph":
-            data = _build_world_graph(state, ros_bridge.is_connected)
-        elif uri == "robot://world_graph/entities":
-            graph = _build_world_graph(state, ros_bridge.is_connected)
-            data = {"entities": graph.get("nodes", []), "count": len(graph.get("nodes", []))}
-        elif uri == "robot://world_graph/relations":
-            graph = _build_world_graph(state, ros_bridge.is_connected)
-            data = {"relations": graph.get("edges", []), "count": len(graph.get("edges", []))}
-        else:
-            data = {"error": f"Unknown resource: {uri}"}
+async def handle_world_graph_resource(uri: str, ros_bridge: ROS2Bridge) -> list[TextContent] | None:
+    """Handle world graph resource reads. Returns None if URI not handled."""
+    state = ros_bridge.state
 
-        return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    if uri == "robot://world_graph":
+        data = _build_world_graph(state, ros_bridge.is_connected)
+    elif uri == "robot://world_graph/entities":
+        graph = _build_world_graph(state, ros_bridge.is_connected)
+        data = {"entities": graph.get("nodes", []), "count": len(graph.get("nodes", []))}
+    elif uri == "robot://world_graph/relations":
+        graph = _build_world_graph(state, ros_bridge.is_connected)
+        data = {"relations": graph.get("edges", []), "count": len(graph.get("edges", []))}
+    else:
+        return None
+
+    return [TextContent(type="text", text=json.dumps(data, indent=2))]
 
 
 def _build_world_graph(state: Any, is_connected: bool) -> dict:
@@ -255,4 +246,3 @@ def _infer_relation(distance: float, angle: float) -> str:
         return "near"
     else:
         return "visible"
-

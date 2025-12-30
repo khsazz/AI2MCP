@@ -9,76 +9,67 @@ import json
 import math
 from typing import TYPE_CHECKING
 
-from mcp.server import Server
 from mcp.types import Resource, TextContent
 
 if TYPE_CHECKING:
     from mcp_ros2_bridge.ros_node import ROS2Bridge
 
 
-def register_scan_resource(server: Server, ros_bridge: ROS2Bridge) -> None:
-    """Register scan resource with MCP server."""
+def get_scan_resources() -> list[Resource]:
+    """Get list of scan-related resources."""
+    return [
+        Resource(
+            uri="robot://scan/summary",
+            name="Scan Summary",
+            description="Summarized LiDAR scan with min/max/avg distances per quadrant",
+            mimeType="application/json",
+        ),
+        Resource(
+            uri="robot://scan/obstacles",
+            name="Detected Obstacles",
+            description="List of detected obstacles with positions relative to robot",
+            mimeType="application/json",
+        ),
+        Resource(
+            uri="robot://scan/raw",
+            name="Raw Scan Data",
+            description="Raw LiDAR range data (may be large)",
+            mimeType="application/json",
+        ),
+    ]
 
-    existing_list = server._resource_handlers.get("list_resources")
 
-    @server.list_resources()
-    async def list_scan_resources() -> list[Resource]:
-        """List scan-related resources."""
-        pose_resources = await existing_list() if existing_list else []
-        scan_resources = [
-            Resource(
-                uri="robot://scan/summary",
-                name="Scan Summary",
-                description="Summarized LiDAR scan with min/max/avg distances per quadrant",
-                mimeType="application/json",
-            ),
-            Resource(
-                uri="robot://scan/obstacles",
-                name="Detected Obstacles",
-                description="List of detected obstacles with positions relative to robot",
-                mimeType="application/json",
-            ),
-            Resource(
-                uri="robot://scan/raw",
-                name="Raw Scan Data",
-                description="Raw LiDAR range data (may be large)",
-                mimeType="application/json",
-            ),
-        ]
-        return pose_resources + scan_resources
+async def handle_scan_resource(uri: str, ros_bridge: ROS2Bridge) -> list[TextContent] | None:
+    """Handle scan-related resource reads. Returns None if URI not handled."""
+    state = ros_bridge.state
 
-    @server.read_resource()
-    async def read_scan_resource(uri: str) -> list[TextContent]:
-        """Read scan-related resources."""
-        state = ros_bridge.state
+    if uri == "robot://scan/summary":
+        data = _create_scan_summary(
+            state.scan_ranges,
+            state.scan_angle_min,
+            state.scan_angle_max,
+            state.scan_angle_increment,
+        )
+    elif uri == "robot://scan/obstacles":
+        data = _detect_obstacles(
+            state.scan_ranges,
+            state.scan_angle_min,
+            state.scan_angle_increment,
+        )
+    elif uri == "robot://scan/raw":
+        # Limit raw data size
+        ranges = state.scan_ranges[:360] if len(state.scan_ranges) > 360 else state.scan_ranges
+        data = {
+            "ranges": [round(r, 3) if not math.isinf(r) else None for r in ranges],
+            "angle_min": state.scan_angle_min,
+            "angle_max": state.scan_angle_max,
+            "angle_increment": state.scan_angle_increment,
+            "num_readings": len(state.scan_ranges),
+        }
+    else:
+        return None
 
-        if uri == "robot://scan/summary":
-            data = _create_scan_summary(
-                state.scan_ranges,
-                state.scan_angle_min,
-                state.scan_angle_max,
-                state.scan_angle_increment,
-            )
-        elif uri == "robot://scan/obstacles":
-            data = _detect_obstacles(
-                state.scan_ranges,
-                state.scan_angle_min,
-                state.scan_angle_increment,
-            )
-        elif uri == "robot://scan/raw":
-            # Limit raw data size
-            ranges = state.scan_ranges[:360] if len(state.scan_ranges) > 360 else state.scan_ranges
-            data = {
-                "ranges": [round(r, 3) if not math.isinf(r) else None for r in ranges],
-                "angle_min": state.scan_angle_min,
-                "angle_max": state.scan_angle_max,
-                "angle_increment": state.scan_angle_increment,
-                "num_readings": len(state.scan_ranges),
-            }
-        else:
-            data = {"error": f"Unknown resource: {uri}"}
-
-        return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    return [TextContent(type="text", text=json.dumps(data, indent=2))]
 
 
 def _create_scan_summary(
@@ -221,4 +212,3 @@ def _finalize_cluster(cluster: list[tuple[float, float, float]]) -> dict:
 def _get_angles(angle_min: float, angle_increment: float, count: int) -> list[float]:
     """Generate list of angles for scan readings."""
     return [angle_min + i * angle_increment for i in range(count)]
-

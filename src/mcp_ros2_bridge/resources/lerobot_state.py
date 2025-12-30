@@ -114,6 +114,8 @@ class LeRobotResourceManager:
 
         # Convert to graph and get world context
         graph_data = self.graph_transformer.to_graph(state)
+        device = next(self.gnn_model.parameters()).device
+        graph_data = graph_data.to(device)
         world_context = self.gnn_model.to_world_context(graph_data, self._predicate_threshold)
 
         world_context["frame_index"] = self.data_manager._current_frame_idx
