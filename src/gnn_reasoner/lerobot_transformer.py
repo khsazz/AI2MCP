@@ -2,16 +2,26 @@
 
 Converts LeRobot observation states into torch_geometric graph structures
 suitable for GNN-based relational reasoning.
+
+Supports both kinematic-only graphs and hybrid graphs with detected objects.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
+import numpy as np
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
+
+if TYPE_CHECKING:
+    from gnn_reasoner.camera import CameraIntrinsics, Object3D
+    from gnn_reasoner.detector import Detection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -302,12 +312,144 @@ class LeRobotGraphTransformer:
         """
         return [self.to_graph(state) for state in states]
 
+    def to_graph_with_objects(
+        self,
+        observation_state: Tensor,
+        objects_3d: list[Object3D],
+        gripper_state: float | None = None,
+    ) -> Data:
+        """Convert observation state to graph with detected object nodes.
+
+        Convenience wrapper that extracts positions/labels from Object3D.
+
+        Args:
+            observation_state: Robot state tensor of shape (state_dim,)
+            objects_3d: List of Object3D from detections_to_objects_3d()
+            gripper_state: Optional gripper openness (0=closed, 1=open).
+                           If None, attempts to extract from observation_state.
+
+        Returns:
+            torch_geometric.data.Data with joint + object nodes
+        """
+        if not objects_3d:
+            return self.to_graph(observation_state, None, None)
+
+        # Extract positions and labels
+        positions = torch.tensor(
+            [obj.position for obj in objects_3d],
+            dtype=torch.float32,
+        )
+        labels = [obj.class_name for obj in objects_3d]
+
+        # Create graph
+        graph = self.to_graph(observation_state, positions, labels)
+
+        # Store additional metadata
+        graph.object_confidences = torch.tensor(
+            [obj.confidence for obj in objects_3d],
+            dtype=torch.float32,
+        )
+
+        # Store gripper state for predicate computation
+        if gripper_state is not None:
+            graph.gripper_state = torch.tensor([gripper_state], dtype=torch.float32)
+        elif observation_state.numel() > 6:
+            # Assume ALOHA: joint 6 is left gripper, joint 13 is right gripper
+            # Gripper values are typically normalized, higher = more open
+            left_gripper = observation_state[6].item() if observation_state.numel() > 6 else 0.5
+            right_gripper = observation_state[13].item() if observation_state.numel() > 13 else 0.5
+            graph.gripper_state = torch.tensor([left_gripper, right_gripper], dtype=torch.float32)
+
+        return graph
+
+    def to_graph_from_detections(
+        self,
+        observation_state: Tensor,
+        detections: list[Detection],
+        depth_map: np.ndarray,
+        intrinsics: CameraIntrinsics,
+        camera_pose: np.ndarray | None = None,
+        gripper_state: float | None = None,
+    ) -> Data:
+        """Full pipeline: detections + depth → graph with object nodes.
+
+        Args:
+            observation_state: Robot state tensor
+            detections: List of Detection objects from VisionDetector
+            depth_map: Depth map from DepthEstimator
+            intrinsics: Camera intrinsic parameters
+            camera_pose: Optional camera-to-world transformation
+            gripper_state: Optional gripper openness
+
+        Returns:
+            torch_geometric.data.Data with joint + object nodes
+        """
+        from gnn_reasoner.camera import detections_to_objects_3d
+
+        if not detections:
+            return self.to_graph(observation_state, None, None)
+
+        # Convert detections to 3D objects
+        objects_3d = detections_to_objects_3d(
+            detections, depth_map, intrinsics, camera_pose
+        )
+
+        return self.to_graph_with_objects(observation_state, objects_3d, gripper_state)
+
+    def get_gripper_positions(self, graph: Data) -> tuple[Tensor | None, Tensor | None]:
+        """Extract gripper (end-effector) positions from graph.
+
+        Args:
+            graph: PyG Data object
+
+        Returns:
+            Tuple of (left_gripper_pos, right_gripper_pos), each (3,) or None
+        """
+        if not hasattr(graph, "node_types"):
+            return None, None
+
+        gripper_mask = graph.node_types == 1
+        gripper_indices = torch.where(gripper_mask)[0]
+
+        if len(gripper_indices) == 0:
+            return None, None
+
+        positions = graph.x[:, 2:5]  # x, y, z columns
+
+        if len(gripper_indices) >= 2:
+            # Assume first is left, second is right (ALOHA convention)
+            left_pos = positions[gripper_indices[0]]
+            right_pos = positions[gripper_indices[1]]
+            return left_pos, right_pos
+        else:
+            return positions[gripper_indices[0]], None
+
+    def get_object_positions(self, graph: Data) -> Tensor | None:
+        """Extract object positions from graph.
+
+        Args:
+            graph: PyG Data object
+
+        Returns:
+            Tensor of shape (num_objects, 3) or None
+        """
+        if not hasattr(graph, "node_types"):
+            return None
+
+        object_mask = graph.node_types == 2
+        if not object_mask.any():
+            return None
+
+        return graph.x[object_mask, 2:5]
+
 
 def compute_heuristic_predicates(
     graph: Data,
-    near_threshold: float = 0.3,
+    near_threshold: float = 0.2,
     contact_threshold: float = 0.05,
-    velocity_threshold: float = 0.1,
+    holding_threshold: float = 0.08,
+    velocity_threshold: float = 0.01,
+    gripper_closed_threshold: float = 0.3,
     prev_positions: Tensor | None = None,
 ) -> Tensor:
     """Compute ground-truth predicate labels from graph structure using heuristics.
@@ -317,9 +459,11 @@ def compute_heuristic_predicates(
 
     Args:
         graph: PyG Data object from LeRobotGraphTransformer
-        near_threshold: Distance threshold for is_near predicate
-        contact_threshold: Distance threshold for is_contacting
+        near_threshold: Distance threshold for is_near predicate (meters)
+        contact_threshold: Distance threshold for is_contacting (meters)
+        holding_threshold: Distance threshold for is_holding (meters)
         velocity_threshold: Velocity threshold for approaching/retracting
+        gripper_closed_threshold: Gripper state below this = closed (0-1 scale)
         prev_positions: Previous frame positions for motion-based predicates
 
     Returns:
@@ -362,30 +506,144 @@ def compute_heuristic_predicates(
     labels[:, 3] = (diff[:, 0] < -0.05).float()  # is_left_of
     labels[:, 4] = (diff[:, 0] > 0.05).float()  # is_right_of
 
-    # is_holding: end-effector (type=1) near object (type=2)
+    # is_holding: gripper (type=1) near object (type=2) AND gripper is closed
     if node_types is not None:
         src_types = node_types[edge_index[0]]
         tgt_types = node_types[edge_index[1]]
+
+        # Identify gripper-object edges (bidirectional)
         is_gripper_to_object = (src_types == 1) & (tgt_types == 2)
         is_object_to_gripper = (src_types == 2) & (tgt_types == 1)
         gripper_object_edge = is_gripper_to_object | is_object_to_gripper
-        labels[:, 5] = (gripper_object_edge & (distances < contact_threshold * 2)).float()
 
-    # is_contacting: very close
+        # Check distance condition
+        close_enough = distances < holding_threshold
+
+        # Check gripper state if available
+        if hasattr(graph, "gripper_state") and graph.gripper_state is not None:
+            gripper_states = graph.gripper_state
+            # For each edge, determine which gripper (left=0, right=1) is involved
+            # ALOHA: node indices 14=left gripper, 15=right gripper (or similar)
+            # Simplified: check if any gripper is closed
+            any_gripper_closed = (gripper_states < gripper_closed_threshold).any()
+
+            # More precise: match gripper node to gripper state
+            # For now, use simple heuristic
+            is_holding = gripper_object_edge & close_enough & any_gripper_closed
+        else:
+            # No gripper state, use distance only
+            is_holding = gripper_object_edge & close_enough
+
+        labels[:, 5] = is_holding.float()
+
+    # is_contacting: very close (any node types)
     labels[:, 6] = (distances < contact_threshold).float()
 
     # Motion-based predicates (if previous positions available)
-    if prev_positions is not None:
-        prev_src = prev_positions[edge_index[0]]
-        prev_tgt = prev_positions[edge_index[1]]
-        prev_distances = torch.norm(prev_tgt - prev_src, dim=-1)
+    if prev_positions is not None and prev_positions.shape[0] >= edge_index.max() + 1:
+        try:
+            prev_src = prev_positions[edge_index[0]]
+            prev_tgt = prev_positions[edge_index[1]]
+            prev_distances = torch.norm(prev_tgt - prev_src, dim=-1)
 
-        velocity = distances - prev_distances  # negative = approaching
+            velocity = distances - prev_distances  # negative = approaching
 
-        labels[:, 7] = (velocity < -velocity_threshold).float()  # is_approaching
-        labels[:, 8] = (velocity > velocity_threshold).float()  # is_retracting
+            labels[:, 7] = (velocity < -velocity_threshold).float()  # is_approaching
+            labels[:, 8] = (velocity > velocity_threshold).float()  # is_retracting
+        except IndexError:
+            # Previous graph had different number of nodes (e.g., different detections)
+            logger.debug("Skipping motion predicates due to node count mismatch")
 
     return labels
+
+
+def compute_object_interaction_predicates(
+    graph: Data,
+    holding_distance: float = 0.08,
+    contact_distance: float = 0.05,
+) -> dict[str, list[dict]]:
+    """Extract human-readable object interaction predicates.
+
+    Unlike compute_heuristic_predicates which returns edge-level tensors,
+    this returns structured interaction data for MCP resources.
+
+    Args:
+        graph: PyG Data object with object nodes
+        holding_distance: Distance threshold for holding
+        contact_distance: Distance threshold for contact
+
+    Returns:
+        Dictionary with interaction types as keys:
+        {
+            "holding": [{"gripper": "left", "object": "cup", "confidence": 0.95}],
+            "contacting": [...],
+            "near": [...]
+        }
+    """
+    interactions: dict[str, list[dict]] = {
+        "holding": [],
+        "contacting": [],
+        "near": [],
+    }
+
+    if not hasattr(graph, "node_types"):
+        return interactions
+
+    node_types = graph.node_types
+    positions = graph.x[:, 2:5]
+    object_labels = getattr(graph, "object_labels", None) or []
+    object_confidences = getattr(graph, "object_confidences", None)
+
+    # Find gripper and object indices
+    gripper_indices = torch.where(node_types == 1)[0]
+    object_indices = torch.where(node_types == 2)[0]
+
+    if len(gripper_indices) == 0 or len(object_indices) == 0:
+        return interactions
+
+    # Get gripper states if available
+    gripper_states = getattr(graph, "gripper_state", None)
+
+    # Compute gripper-object distances
+    for g_idx, gripper_idx in enumerate(gripper_indices):
+        gripper_pos = positions[gripper_idx]
+        gripper_name = "left" if g_idx == 0 else "right"
+        gripper_closed = False
+
+        if gripper_states is not None and g_idx < len(gripper_states):
+            gripper_closed = gripper_states[g_idx].item() < 0.3
+
+        for o_idx, object_idx in enumerate(object_indices):
+            object_pos = positions[object_idx]
+            distance = torch.norm(object_pos - gripper_pos).item()
+
+            # Get object info
+            object_label_idx = object_idx.item() - graph.num_joints
+            if 0 <= object_label_idx < len(object_labels):
+                object_name = object_labels[object_label_idx]
+            else:
+                object_name = f"object_{o_idx}"
+
+            confidence = 1.0
+            if object_confidences is not None and o_idx < len(object_confidences):
+                confidence = object_confidences[o_idx].item()
+
+            interaction_info = {
+                "gripper": gripper_name,
+                "object": object_name,
+                "distance": round(distance, 4),
+                "confidence": round(confidence, 3),
+            }
+
+            # Check interaction types
+            if distance < holding_distance and gripper_closed:
+                interactions["holding"].append(interaction_info)
+            elif distance < contact_distance:
+                interactions["contacting"].append(interaction_info)
+            elif distance < 0.2:  # near threshold
+                interactions["near"].append(interaction_info)
+
+    return interactions
 
 
 def add_predicate_labels(

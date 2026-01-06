@@ -193,6 +193,78 @@ class DataManager:
                 images[camera_name] = value
         return images
 
+    def get_image(
+        self,
+        idx: int | None = None,
+        camera: str | None = None,
+        as_numpy: bool = True,
+    ) -> np.ndarray | Tensor | None:
+        """Get a single camera image for a frame.
+
+        Convenience method for vision processing pipelines.
+
+        Args:
+            idx: Frame index. If None, uses current frame.
+            camera: Camera name (e.g., "top", "wrist_cam"). 
+                    If None, returns the first available camera.
+            as_numpy: If True, return as numpy array (H, W, C) uint8.
+                      If False, return as tensor.
+
+        Returns:
+            Image as numpy array (H, W, 3) or tensor, or None if no images.
+        """
+        if idx is None:
+            idx = self._current_frame_idx
+
+        images = self.get_images(idx)
+
+        if not images:
+            return None
+
+        if camera is None:
+            # Get first available camera
+            camera = next(iter(images.keys()))
+
+        if camera not in images:
+            available = list(images.keys())
+            raise KeyError(
+                f"Camera '{camera}' not found. Available: {available}"
+            )
+
+        image = images[camera]
+
+        if as_numpy:
+            if isinstance(image, Tensor):
+                image = image.numpy()
+            # Handle different tensor formats
+            if image.ndim == 3:
+                # Could be (C, H, W) or (H, W, C)
+                if image.shape[0] in (1, 3, 4):  # Likely (C, H, W)
+                    image = np.transpose(image, (1, 2, 0))
+            # Convert to uint8 if needed
+            if image.dtype != np.uint8:
+                if image.max() <= 1.0:
+                    image = (image * 255).astype(np.uint8)
+                else:
+                    image = image.astype(np.uint8)
+            # Ensure RGB (not RGBA)
+            if image.ndim == 3 and image.shape[2] == 4:
+                image = image[:, :, :3]
+
+        return image
+
+    def get_camera_names(self, idx: int = 0) -> list[str]:
+        """Get list of available camera names.
+
+        Args:
+            idx: Frame index to check (default: 0)
+
+        Returns:
+            List of camera names (e.g., ["top", "wrist_cam"])
+        """
+        images = self.get_images(idx)
+        return list(images.keys())
+
     def iter_episodes(self) -> Iterator[Episode]:
         """Iterate over all episodes in the dataset.
 

@@ -1,0 +1,23 @@
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison of Option A (Geometric Fusion) vs Option C (Multi-Modal Fusion)}
+\label{tab:model_comparison}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric} & \textbf{Option A} & \textbf{Option C} \\
+\midrule
+\multicolumn{3}{l}{\textit{Accuracy}} \\
+Micro Accuracy & 0.8511 & 0.4333 \\
+Macro F1 & 0.2332 & 0.1209 \\
+\midrule
+\multicolumn{3}{l}{\textit{Latency (ms)}} \\
+Mean & 2.14 & 3.38 \\
+P95 & 2.36 & 3.74 \\
+\midrule
+\multicolumn{3}{l}{\textit{Memory (MB)}} \\
+Model Size & 0.81 & 2.07 \\
+Peak Usage & 15.84 & 22.02 \\
+\bottomrule
+\end{tabular}
+\end{table}

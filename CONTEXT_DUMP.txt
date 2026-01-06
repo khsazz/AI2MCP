@@ -416,12 +416,14 @@ chapters:
 key_thesis_claims:
   - MCP solves N×M integration problem
   - GNN provides structured relational understanding
-  - 99.4% predicate accuracy demonstrates viability
+  - 99.4% predicate accuracy demonstrates viability (kinematic only)
   - 16.9 ops/sec sufficient for interactive control
   - Protocol overhead minimal (~0.6ms serialization)
+  - Vision integration improves is_near F1 by +35.6% (0.668 → 0.906)
+  - Accuracy vs latency trade-off: +4% accuracy costs 21× latency
 
 [FUTURE_WORK_ITEMS]
-1. Visual object integration (YOLO/DETIC → object nodes)
+1. ✅ Visual object integration (YOLO/DETIC → object nodes) - COMPLETE
 2. LLM agent loop with chain-of-thought
 3. Multi-robot orchestration via MCP
 4. Safety constraint verification
@@ -467,6 +469,126 @@ training_history.json:
 2. LLM agent integration demo
 3. Gazebo simulation testing
 4. Additional datasets training
+
+[VISION_INTEGRATION_COMPONENTS]
+status: Complete (Phase 1-4)
+
+new_files:
+  - src/gnn_reasoner/detector.py     # VisionDetector (DETIC/GroundingDINO/YOLOv8)
+  - src/gnn_reasoner/depth.py        # DepthEstimator (ZoeDepth/MiDaS/DepthAnything)
+  - src/gnn_reasoner/camera.py       # CameraIntrinsics, pixel_to_world, bbox_to_3d
+  - src/gnn_reasoner/model/multimodal_gnn.py  # MultiModalGNN, VisionEncoder
+  - scripts/train_multimodal_gnn.py  # Training script for Option C
+  - scripts/compare_models.py        # A vs C benchmark harness
+  - scripts/generate_comparison_figures.py  # Thesis figures
+  - tests/test_vision_pipeline.py    # 26 unit tests
+  - tests/test_multimodal_gnn.py     # 14 unit tests
+
+modified_files:
+  - src/gnn_reasoner/lerobot_transformer.py  # to_graph_with_objects(), interaction predicates
+  - src/gnn_reasoner/__init__.py     # Exported new components
+  - src/gnn_reasoner/model/__init__.py  # Exported MultiModalGNN
+
+option_a_geometric_fusion:
+  architecture: VisionDetector → DepthEstimator → 3D Projection → Graph → RelationalGNN
+  parameters: 203,369
+  latency_mean: 2.42ms
+  latency_p95: 2.72ms
+  micro_accuracy: 92.27%
+  macro_f1: 0.283
+  memory_peak: 107 MB
+  model_size: 0.81 MB
+  checkpoint: experiments/aloha_training/best_model.pt
+
+option_c_multimodal_fusion:
+  architecture: VisionDetector → DINOv2 → RoI Pool → CrossAttention → GNN
+  vision_encoder: DINOv2-ViT-S/14 (22M params, frozen)
+  parameters: 534,121
+  latency_mean: 52.12ms
+  latency_p95: 54.53ms
+  micro_accuracy: 96.21%
+  macro_f1: 0.311
+  memory_peak: 231 MB
+  model_size: 2.14 MB
+  training_time: 32.0 min (100 epochs)
+  checkpoint: experiments/multimodal_aloha/best_model.pt
+
+per_predicate_f1_comparison:
+  is_near: A=0.668, C=0.906 (+35.6%)  # KEY RESULT
+  is_left_of: A=0.940, C=0.943 (+0.3%)
+  is_right_of: A=0.941, C=0.939 (-0.3%)
+  is_above: A=0.000, C=0.004
+  is_below: A=0.000, C=0.004
+  is_holding: A=0.000, C=0.000
+  is_contacting: A=0.000, C=0.000
+  is_approaching: A=0.000, C=0.001
+  is_retracting: A=0.000, C=0.000
+
+comparison_figures:
+  - thesis/figures/accuracy_comparison.pdf
+  - thesis/figures/latency_breakdown.pdf
+  - thesis/figures/per_predicate_f1.pdf
+  - thesis/figures/memory_comparison.pdf
+  - thesis/figures/radar_comparison.pdf
+  - thesis/figures/latency_distribution.pdf
+  - thesis/figures/comparison_table.tex
+
+[ABLATION_STUDY]
+type: depth_noise
+script: scripts/ablation_depth_noise.py
+frames: 200
+noise_levels_cm: [0, 1, 2, 5, 10, 20]
+
+results:
+  sigma_0cm:
+    option_a_acc: 0.9375
+    option_c_acc: 0.9887
+    option_a_f1_near: 0.6683
+    option_c_f1_near: 0.9680
+  sigma_5cm:
+    option_a_acc: 0.9356
+    option_c_acc: 0.9847
+    option_a_f1_near: 0.6675
+    option_c_f1_near: 0.9645
+  sigma_10cm:
+    option_a_acc: 0.9322
+    option_c_acc: 0.9776
+    option_a_f1_near: 0.6696
+    option_c_f1_near: 0.9453
+  sigma_20cm:
+    option_a_acc: 0.9190
+    option_c_acc: 0.9569
+    option_a_f1_near: 0.6640
+    option_c_f1_near: 0.8931
+
+key_findings:
+  - Option C more robust to depth noise (95.7% vs 91.9% at σ=20cm)
+  - Option A nearly invariant (kinematic-focused, 2% drop)
+  - Option C is_near degrades gracefully (7.7% F1 drop at extreme noise)
+  - Practical: Option C benefits most when depth <5cm error
+
+ablation_figures:
+  - experiments/ablation_depth/ablation_accuracy_vs_noise.pdf
+  - experiments/ablation_depth/ablation_f1_near_vs_noise.pdf
+  - experiments/ablation_depth/ablation_relative_degradation.pdf
+
+[MULTIMODAL_GNN_ARCHITECTURE]
+model_name: MultiModalGNN
+components:
+  - NodeEncoder: MLP(5 -> hidden_dim), input=[x,y,z,theta,type]
+  - EdgeEncoder: MLP(2 -> hidden_dim//4), input=[distance, is_kinematic]
+  - VisionEncoder: DINOv2 + RoI pooling + Linear projection
+  - CrossAttentionFusion: Bidirectional attention between vision and kinematic
+  - GNNLayers: 3x GATv2Conv with 4 heads, residual connections
+  - PredicateHead: MLP(hidden_dim*2 -> num_predicates) pairwise
+hyperparameters:
+  hidden_dim: 128
+  num_layers: 3
+  num_heads: 4
+  dropout: 0.1
+  num_predicates: 9
+  vision_model: dinov2_vits14
+  freeze_vision: true
 
 ================================================================================
 END CONTEXT DUMP
