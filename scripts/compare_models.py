@@ -371,6 +371,7 @@ def create_evaluation_data(
     num_frames: int = 500,
     holding_ratio: float = 0.30,  # 30% holding frames for evaluation (matches training)
     contacting_ratio: float = 0.10,  # 10% contacting frames
+    use_real_vision: bool = False,  # Use real GroundingDINO + ZoeDepth
 ) -> list[dict]:
     """Create evaluation data with realistic interaction scenarios.
     
@@ -380,13 +381,24 @@ def create_evaluation_data(
         num_frames: Number of evaluation samples
         holding_ratio: Fraction of holding scenarios
         contacting_ratio: Fraction of contacting scenarios
+        use_real_vision: Use real GroundingDINO + ZoeDepth (slower, accurate latency)
     """
     from gnn_reasoner.camera import Object3D
     
     transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
-    detector = MockVisionDetector()
-    depth_estimator = MockDepthEstimator()
     intrinsics = CameraIntrinsics.default_aloha()
+    
+    # Choose vision models based on flag
+    if use_real_vision:
+        from gnn_reasoner.detector import VisionDetector
+        from gnn_reasoner.depth import DepthEstimator
+        logger.info("Using REAL vision models (GroundingDINO + ZoeDepth)")
+        detector = VisionDetector(model="grounding_dino", device="cuda")
+        depth_estimator = DepthEstimator(model="zoedepth", device="cuda")
+    else:
+        logger.info("Using MOCK vision models")
+        detector = MockVisionDetector()
+        depth_estimator = MockDepthEstimator()
 
     data_list = []
     prev_graph = None
@@ -580,7 +592,8 @@ def main():
     parser.add_argument("--output", type=str, default="experiments/comparison")
     parser.add_argument("--model-a", type=str, default=None, help="Path to RelationalGNN checkpoint")
     parser.add_argument("--model-c", type=str, default=None, help="Path to MultiModalGNN checkpoint")
-    parser.add_argument("--use-mock-vision", action="store_true", help="Use mock vision encoder")
+    parser.add_argument("--use-mock-vision", action="store_true", help="Use mock vision encoder for MultiModalGNN")
+    parser.add_argument("--use-real-vision", action="store_true", help="Use real detectors (GroundingDINO + ZoeDepth)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -594,6 +607,7 @@ def main():
         synthetic=args.synthetic,
         repo_id=args.repo,
         num_frames=args.frames,
+        use_real_vision=args.use_real_vision,
     )
 
     # Load models

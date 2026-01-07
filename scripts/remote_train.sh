@@ -21,6 +21,7 @@ set -e
 REMOTE_USER="xi58pizy"
 REMOTE_HOST="cip7g1.cip.cs.fau.de"
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
+SSH_TERM="xterm-256color"  # Fix for ghostty/non-standard terminals
 REMOTE_DIR="/proj/ciptmp/xi58pizy/AI2MCP"
 LOCAL_DIR="$(dirname "$0")/.."
 CONDA_ENV="ai2mcp"
@@ -29,7 +30,11 @@ CONDA_PREFIX="/proj/ciptmp/xi58pizy/.conda"
 
 # Training config
 EPOCHS="${EPOCHS:-100}"
+MAX_FRAMES="${MAX_FRAMES:-55000}"  # Full ALOHA dataset
 OUTPUT_DIR="${OUTPUT_DIR:-experiments/remote_training}"
+OUTPUT_DIR_A="${OUTPUT_DIR}/relational_gnn"
+OUTPUT_DIR_C="${OUTPUT_DIR}/multimodal_gnn_${MAX_FRAMES}"  # Includes frame count for clarity
+COMPARISON_DIR="${OUTPUT_DIR}/comparison_real"
 
 # Colors
 RED='\033[0;31m'
@@ -104,9 +109,13 @@ echo "Conda env: ${ENV_PATH}"
 REMOTE_SCRIPT
 }
 
-# Start training in tmux
+# Start training in tmux (MultiModalGNN on full dataset)
 start_training() {
-    log_info "Starting training on remote (epochs=${EPOCHS})..."
+    log_info "Starting MultiModalGNN training on remote..."
+    log_info "  - Dataset: lerobot/aloha_static_coffee"
+    log_info "  - Frames: ${MAX_FRAMES} (use MAX_FRAMES=N to override)"
+    log_info "  - Epochs: ${EPOCHS}"
+    log_info "  - Output: ${OUTPUT_DIR_C}"
     
     ssh "${REMOTE}" bash -l << REMOTE_SCRIPT
 WORK_DIR="/proj/ciptmp/xi58pizy"
@@ -128,22 +137,32 @@ tmux new-session -d -s ${TMUX_SESSION} bash -c '
     conda activate "\${CONDA_ENVS}/ai2mcp"
     cd "\${WORK_DIR}/AI2MCP"
     
-    mkdir -p ${OUTPUT_DIR}
+    mkdir -p ${OUTPUT_DIR_C}
     
-    echo "=== Starting Training ==="
+    echo "============================================================"
+    echo "MultiModalGNN Training"
+    echo "============================================================"
     echo "Time: \$(date)"
     echo "GPU: \$(nvidia-smi --query-gpu=name --format=csv,noheader)"
-    echo "Working dir: \$(pwd)"
+    echo "Dataset: lerobot/aloha_static_coffee"
+    echo "Frames: ${MAX_FRAMES}"
+    echo "Epochs: ${EPOCHS}"
+    echo "Output: ${OUTPUT_DIR_C}"
+    echo "============================================================"
     echo ""
     
     python scripts/train_multimodal_gnn.py \
+        --repo lerobot/aloha_static_coffee \
+        --max-frames ${MAX_FRAMES} \
         --epochs ${EPOCHS} \
-        --output ${OUTPUT_DIR} \
-        2>&1 | tee ${OUTPUT_DIR}/training.log
+        --output ${OUTPUT_DIR_C} \
+        2>&1 | tee ${OUTPUT_DIR_C}/training.log
     
     echo ""
-    echo "=== Training Complete ==="
+    echo "============================================================"
+    echo "Training Complete!"
     echo "Time: \$(date)"
+    echo "============================================================"
     echo "Press any key to exit..."
     read
 '
@@ -153,6 +172,122 @@ echo "To attach: ssh ${REMOTE} -t tmux attach -t ${TMUX_SESSION}"
 REMOTE_SCRIPT
     
     log_info "Training started! Use './scripts/remote_train.sh status' to check progress"
+}
+
+# Full pipeline: Train both models + benchmark with real vision
+start_full_pipeline() {
+    log_info "Starting FULL training pipeline on remote..."
+    log_info "  - RelationalGNN on full ALOHA (${MAX_FRAMES} frames)"
+    log_info "  - MultiModalGNN on full ALOHA (${MAX_FRAMES} frames)"
+    log_info "  - Comparison with REAL vision (GroundingDINO + ZoeDepth)"
+    log_info "  - Epochs: ${EPOCHS}"
+    log_info "Estimated time: 6-8 hours"
+    
+    ssh "${REMOTE}" bash -l << REMOTE_SCRIPT
+WORK_DIR="/proj/ciptmp/xi58pizy"
+CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+
+# Load modules
+module load cuda/12.0 python3/anaconda-2024.07 tmux
+
+# Kill existing session if any
+tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true
+
+# Start new tmux session with full pipeline
+tmux new-session -d -s ${TMUX_SESSION} bash -c '
+    set -e  # Exit on error
+    WORK_DIR="/proj/ciptmp/xi58pizy"
+    CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+    
+    module load cuda/12.0 python3/anaconda-2024.07
+    source \$(conda info --base)/etc/profile.d/conda.sh
+    conda activate "\${CONDA_ENVS}/ai2mcp"
+    cd "\${WORK_DIR}/AI2MCP"
+    
+    mkdir -p ${OUTPUT_DIR_A} ${OUTPUT_DIR_C} ${COMPARISON_DIR}
+    
+    echo "================================================================"
+    echo "=== FULL TRAINING PIPELINE ==="
+    echo "================================================================"
+    echo "Start: \$(date)"
+    echo "GPU: \$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
+    echo ""
+    
+    # ===== PHASE 1: Train RelationalGNN =====
+    echo ""
+    echo "================================================================"
+    echo "=== PHASE 1/3: Training RelationalGNN (Option A) ==="
+    echo "================================================================"
+    echo "Dataset: Full ALOHA (${MAX_FRAMES} frames)"
+    echo "Epochs: ${EPOCHS}"
+    echo ""
+    
+    python scripts/train_relational_gnn.py \
+        --repo lerobot/aloha_static_coffee \
+        --max-frames ${MAX_FRAMES} \
+        --epochs ${EPOCHS} \
+        --output ${OUTPUT_DIR_A} \
+        2>&1 | tee ${OUTPUT_DIR_A}/training.log
+    
+    echo ""
+    echo "Phase 1 complete: \$(date)"
+    
+    # ===== PHASE 2: Train MultiModalGNN =====
+    echo ""
+    echo "================================================================"
+    echo "=== PHASE 2/3: Training MultiModalGNN (Option C) ==="
+    echo "================================================================"
+    echo "Dataset: Full ALOHA (${MAX_FRAMES} frames)"
+    echo "Epochs: ${EPOCHS}"
+    echo ""
+    
+    python scripts/train_multimodal_gnn.py \
+        --repo lerobot/aloha_static_coffee \
+        --max-frames ${MAX_FRAMES} \
+        --epochs ${EPOCHS} \
+        --output ${OUTPUT_DIR_C} \
+        2>&1 | tee ${OUTPUT_DIR_C}/training.log
+    
+    echo ""
+    echo "Phase 2 complete: \$(date)"
+    
+    # ===== PHASE 3: Comparison with REAL Vision =====
+    echo ""
+    echo "================================================================"
+    echo "=== PHASE 3/3: Comparison Benchmark (REAL Vision) ==="
+    echo "================================================================"
+    echo "Using: GroundingDINO + ZoeDepth (honest latency measurement)"
+    echo ""
+    
+    python scripts/compare_models.py \
+        --repo lerobot/aloha_static_coffee \
+        --frames 500 \
+        --model-a ${OUTPUT_DIR_A}/best_model.pt \
+        --model-c ${OUTPUT_DIR_C}/best_model.pt \
+        --use-real-vision \
+        --output ${COMPARISON_DIR} \
+        2>&1 | tee ${COMPARISON_DIR}/benchmark.log
+    
+    echo ""
+    echo "================================================================"
+    echo "=== ALL PHASES COMPLETE ==="
+    echo "================================================================"
+    echo "End: \$(date)"
+    echo ""
+    echo "Results:"
+    echo "  - RelationalGNN: ${OUTPUT_DIR_A}/best_model.pt"
+    echo "  - MultiModalGNN: ${OUTPUT_DIR_C}/best_model.pt"
+    echo "  - Comparison:    ${COMPARISON_DIR}/comparison_results.json"
+    echo ""
+    echo "Press any key to exit..."
+    read
+'
+
+echo "Full pipeline started in tmux session: ${TMUX_SESSION}"
+echo "To attach: ssh ${REMOTE} -t tmux attach -t ${TMUX_SESSION}"
+REMOTE_SCRIPT
+    
+    log_info "Full pipeline started! Use './scripts/remote_train.sh status' to check progress"
 }
 
 # Check training status
@@ -186,7 +321,7 @@ REMOTE_SCRIPT
 # Attach to training session
 attach_session() {
     log_info "Attaching to training session..."
-    ssh -t "${REMOTE}" "module load tmux && tmux attach -t ${TMUX_SESSION}"
+    TERM="${SSH_TERM}" ssh -t "${REMOTE}" "bash -lc 'module load tmux 2>/dev/null; tmux attach -t ${TMUX_SESSION}'"
 }
 
 # Pull results back to local
@@ -210,7 +345,7 @@ full_pipeline() {
 # Interactive shell on remote
 shell() {
     log_info "Opening shell on remote..."
-    ssh -t "${REMOTE}" bash -l << 'EOF'
+    TERM="${SSH_TERM}" ssh -t "${REMOTE}" bash -l << 'EOF'
 WORK_DIR="/proj/ciptmp/xi58pizy"
 CONDA_ENVS="${WORK_DIR}/.conda/envs"
 
@@ -229,37 +364,45 @@ show_help() {
     echo "Usage: $0 <command>"
     echo ""
     echo "Commands:"
-    echo "  sync     - Sync code to remote"
-    echo "  setup    - First-time setup (create conda env, install deps)"
-    echo "  train    - Start training in tmux session"
-    echo "  status   - Check training progress"
-    echo "  attach   - Attach to training tmux session"
-    echo "  pull     - Pull results back to local"
-    echo "  shell    - Open interactive shell on remote"
-    echo "  all      - Full pipeline (sync + train)"
+    echo "  sync       - Sync code to remote"
+    echo "  setup      - First-time setup (create conda env, install deps)"
+    echo "  train      - Start MultiModalGNN training in tmux"
+    echo "  train-full - FULL PIPELINE: train both models + real vision benchmark"
+    echo "  status     - Check training progress"
+    echo "  attach     - Attach to training tmux session"
+    echo "  pull       - Pull results back to local"
+    echo "  shell      - Open interactive shell on remote"
+    echo "  all        - Sync + train"
     echo ""
     echo "Environment variables:"
-    echo "  EPOCHS=100      - Number of training epochs"
-    echo "  OUTPUT_DIR=...  - Output directory on remote"
+    echo "  EPOCHS=100       - Number of training epochs (default: 100)"
+    echo "  MAX_FRAMES=55000 - Number of dataset frames (default: 55000 = full ALOHA)"
+    echo "  OUTPUT_DIR=...   - Output directory on remote"
     echo ""
     echo "Examples:"
-    echo "  $0 setup                    # First-time setup"
-    echo "  $0 all                      # Sync and start training"
-    echo "  EPOCHS=50 $0 train          # Train for 50 epochs"
-    echo "  $0 status                   # Check progress"
-    echo "  $0 pull                     # Get results"
+    echo "  $0 setup                     # First-time setup"
+    echo "  $0 sync && $0 train-full     # Sync code and run FULL pipeline (~6-8h)"
+    echo "  EPOCHS=50 $0 train           # Quick multimodal training"
+    echo "  $0 status                    # Check progress"
+    echo "  $0 pull                      # Get results"
+    echo ""
+    echo "Full Pipeline (train-full) runs:"
+    echo "  1. Train RelationalGNN on full ALOHA (55k frames)"
+    echo "  2. Train MultiModalGNN on full ALOHA (55k frames)"
+    echo "  3. Benchmark with REAL vision (GroundingDINO + ZoeDepth)"
 }
 
 # Main
 case "${1:-help}" in
-    sync)    sync_code ;;
-    setup)   setup_remote ;;
-    train)   start_training ;;
-    status)  check_status ;;
-    attach)  attach_session ;;
-    pull)    pull_results ;;
-    shell)   shell ;;
-    all)     full_pipeline ;;
-    *)       show_help ;;
+    sync)       sync_code ;;
+    setup)      setup_remote ;;
+    train)      start_training ;;
+    train-full) start_full_pipeline ;;
+    status)     check_status ;;
+    attach)     attach_session ;;
+    pull)       pull_results ;;
+    shell)      shell ;;
+    all)        full_pipeline ;;
+    *)          show_help ;;
 esac
 

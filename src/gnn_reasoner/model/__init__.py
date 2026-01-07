@@ -18,6 +18,13 @@ from gnn_reasoner.model.multimodal_gnn import (
     CrossAttentionFusion,
     MockVisionEncoder,
 )
+from gnn_reasoner.model.forward_dynamics import (
+    ForwardDynamicsModel,
+    SimulationResult,
+    ActionEncoder,
+    DynamicsNetwork,
+    ForwardDynamicsLoss,
+)
 
 __all__ = [
     # Scene GNN (legacy)
@@ -38,5 +45,11 @@ __all__ = [
     "VisionEncoder",
     "CrossAttentionFusion",
     "MockVisionEncoder",
+    # Forward Dynamics (Phase 10.3 - Pre-Execution Simulation)
+    "ForwardDynamicsModel",
+    "SimulationResult",
+    "ActionEncoder",
+    "DynamicsNetwork",
+    "ForwardDynamicsLoss",
 ]
 

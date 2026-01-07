@@ -1,0 +1,144 @@
+{
+  "option_a": {
+    "model_name": "RelationalGNN (Option A)",
+    "total_samples": 500,
+    "accuracy": {
+      "per_predicate": {
+        "is_near": 0.9104,
+        "is_above": 0.927,
+        "is_below": 0.927,
+        "is_left_of": 0.9523,
+        "is_right_of": 0.9609,
+        "is_holding": 1.0,
+        "is_contacting": 0.9776,
+        "is_approaching": 0.9453,
+        "is_retracting": 0.9579
+      },
+      "precision_per_predicate": {
+        "is_near": 0.864,
+        "is_above": 0,
+        "is_below": 0,
+        "is_left_of": 0.9212,
+        "is_right_of": 0.9409,
+        "is_holding": 0,
+        "is_contacting": 0,
+        "is_approaching": 0.2822,
+        "is_retracting": 0.1583
+      },
+      "recall_per_predicate": {
+        "is_near": 0.9265,
+        "is_above": 0.0,
+        "is_below": 0.0,
+        "is_left_of": 0.975,
+        "is_right_of": 0.9722,
+        "is_holding": 0,
+        "is_contacting": 0.0,
+        "is_approaching": 0.0819,
+        "is_retracting": 0.0934
+      },
+      "f1_per_predicate": {
+        "is_near": 0.8941,
+        "is_above": 0,
+        "is_below": 0,
+        "is_left_of": 0.9473,
+        "is_right_of": 0.9563,
+        "is_holding": 0,
+        "is_contacting": 0,
+        "is_approaching": 0.127,
+        "is_retracting": 0.1175
+      },
+      "macro_f1": 0.338,
+      "micro_accuracy": 0.9509
+    },
+    "latency_ms": {
+      "mean": 1.52,
+      "p50": 1.51,
+      "p95": 1.57,
+      "p99": 1.63
+    },
+    "memory_mb": {
+      "peak": 18.339328,
+      "model_size": 0.8145
+    },
+    "timing_breakdown_ms": {
+      "detection": 234.39,
+      "depth": 61.34,
+      "graph": 0.09,
+      "inference": 1.43
+    }
+  },
+  "option_c": {
+    "model_name": "MultiModalGNN (Option C)",
+    "total_samples": 500,
+    "accuracy": {
+      "per_predicate": {
+        "is_near": 0.5906,
+        "is_above": 0.8801,
+        "is_below": 0.927,
+        "is_left_of": 0.5651,
+        "is_right_of": 0.4401,
+        "is_holding": 0.2345,
+        "is_contacting": 0.0227,
+        "is_approaching": 0.1812,
+        "is_retracting": 0.4441
+      },
+      "precision_per_predicate": {
+        "is_near": 0.2879,
+        "is_above": 0.0624,
+        "is_below": 0,
+        "is_left_of": 0.5109,
+        "is_right_of": 0.4401,
+        "is_holding": 0.0,
+        "is_contacting": 0.0224,
+        "is_approaching": 0.0451,
+        "is_retracting": 0.0294
+      },
+      "recall_per_predicate": {
+        "is_near": 0.0015,
+        "is_above": 0.0458,
+        "is_below": 0.0,
+        "is_left_of": 0.2783,
+        "is_right_of": 0.9999,
+        "is_holding": 0,
+        "is_contacting": 0.9986,
+        "is_approaching": 0.7857,
+        "is_retracting": 0.5478
+      },
+      "f1_per_predicate": {
+        "is_near": 0.0029,
+        "is_above": 0.0528,
+        "is_below": 0,
+        "is_left_of": 0.3604,
+        "is_right_of": 0.6112,
+        "is_holding": 0,
+        "is_contacting": 0.0438,
+        "is_approaching": 0.0852,
+        "is_retracting": 0.0558
+      },
+      "macro_f1": 0.1347,
+      "micro_accuracy": 0.4762
+    },
+    "latency_ms": {
+      "mean": 24.5,
+      "p50": 25.13,
+      "p95": 25.56,
+      "p99": 26.73
+    },
+    "memory_mb": {
+      "peak": 140.716544,
+      "model_size": 2.136484
+    },
+    "timing_breakdown_ms": {
+      "detection": 234.39,
+      "depth": 0,
+      "graph": 0.45,
+      "inference": 24.05
+    }
+  },
+  "config": {
+    "synthetic": false,
+    "repo": "lerobot/aloha_static_coffee",
+    "frames": 500,
+    "device": "cuda"
+  }
+}

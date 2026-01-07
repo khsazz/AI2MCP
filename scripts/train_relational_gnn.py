@@ -71,6 +71,18 @@ GPU_PROFILES = {
         num_workers=4,
         pin_memory=True,
     ),
+    "rtx3070": GPUProfile(
+        name="RTX 3070 (8GB)",
+        batch_size=32,
+        accumulation_steps=2,  # Effective batch = 64
+        hidden_dim=128,
+        num_layers=3,
+        learning_rate=3e-4,
+        weight_decay=1e-4,
+        use_amp=True,
+        num_workers=4,
+        pin_memory=True,
+    ),
     "rtx4080": GPUProfile(
         name="RTX 4080 (16GB)",
         batch_size=64,
@@ -109,12 +121,12 @@ def detect_gpu_profile() -> str:
     
     print(f"Detected GPU: {torch.cuda.get_device_name(0)} ({vram_gb:.1f}GB)")
     
-    if "4080" in gpu_name or "4090" in gpu_name or vram_gb >= 12:
+    # Select profile based on VRAM
+    if vram_gb >= 12:
         return "rtx4080"
-    elif "500" in gpu_name or "4060" in gpu_name or vram_gb < 6:
-        return "rtx500"
+    elif vram_gb >= 6:
+        return "rtx3070"
     else:
-        # Default to conservative profile
         return "rtx500"
 
 

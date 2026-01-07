@@ -294,6 +294,133 @@ class TestHeuristicPredicates:
 
 
 # ==============================================================================
+# Global Context Tests (ConditionalPredicateHead)
+# ==============================================================================
+
+
+class TestGlobalContextConditioning:
+    """Tests for global context (gripper state) conditioning."""
+
+    def test_extract_global_context_from_state(self):
+        """Test extract_global_context returns correct shape."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.randn(14)
+
+        u = transformer.extract_global_context(state)
+
+        assert u.shape == (1, 2)  # [left_gripper, right_gripper]
+
+    def test_extract_global_context_with_explicit_gripper(self):
+        """Test extract_global_context with explicit gripper_state."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.randn(14)
+
+        u = transformer.extract_global_context(state, gripper_state=0.02)
+
+        assert u.shape == (1, 2)
+        # Both grippers should have same value when explicit
+        assert u[0, 0] == u[0, 1]
+
+    def test_graph_has_u_attribute(self):
+        """Test that to_graph_with_objects() sets graph.u."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+        from gnn_reasoner.camera import Object3D
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.randn(14)
+
+        # Create a mock object for to_graph_with_objects
+        mock_object = Object3D(
+            class_name="cup",
+            confidence=0.9,
+            position=(0.3, 0.0, 0.1),
+            size=(0.05, 0.08),
+            bbox=(100, 100, 200, 200),
+        )
+
+        graph = transformer.to_graph_with_objects(state, [mock_object], gripper_state=0.02)
+
+        assert hasattr(graph, "u")
+        assert graph.u is not None
+        assert graph.u.shape == (1, 2)
+
+    def test_closed_gripper_context(self):
+        """Test that closed gripper (0.0) produces low u values."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.zeros(14)  # All zeros = closed grippers
+
+        u = transformer.extract_global_context(state)
+
+        # Closed gripper should have low values
+        assert u[0, 0].item() < 0.5
+        assert u[0, 1].item() < 0.5
+
+
+class TestConditionalPredicateHead:
+    """Tests for ConditionalPredicateHead class."""
+
+    def test_head_creation(self):
+        """Test head initialization."""
+        from gnn_reasoner.model import ConditionalPredicateHead
+
+        head = ConditionalPredicateHead(hidden_dim=64, global_dim=2, num_predicates=9)
+
+        assert head is not None
+        assert head.num_predicates == 9
+        assert head.global_dim == 2
+
+    def test_head_forward(self):
+        """Test forward pass with global context."""
+        from gnn_reasoner.model import ConditionalPredicateHead
+
+        head = ConditionalPredicateHead(hidden_dim=64, global_dim=2, num_predicates=9)
+
+        node_embeddings = torch.randn(16, 64)
+        edge_index = torch.tensor([[0, 1, 2], [1, 2, 3]])  # 3 edges
+        u = torch.tensor([[0.0, 0.0]])  # Closed gripper
+
+        logits = head(node_embeddings, edge_index, u)
+
+        assert logits.shape == (3, 9)
+
+    def test_different_gripper_states_produce_different_outputs(self):
+        """Test that open vs closed gripper produces different predicate logits."""
+        from gnn_reasoner.model import ConditionalPredicateHead
+
+        head = ConditionalPredicateHead(hidden_dim=64, global_dim=2, num_predicates=9)
+
+        node_embeddings = torch.randn(16, 64)
+        edge_index = torch.tensor([[0, 1], [1, 2]])
+
+        u_closed = torch.tensor([[0.0, 0.0]])
+        u_open = torch.tensor([[1.0, 1.0]])
+
+        logits_closed = head(node_embeddings, edge_index, u_closed)
+        logits_open = head(node_embeddings, edge_index, u_open)
+
+        # Outputs should be different (not necessarily in a specific direction)
+        assert not torch.allclose(logits_closed, logits_open)
+
+
+# ==============================================================================
 # RelationalGNN Tests
 # ==============================================================================
 
@@ -312,6 +439,21 @@ class TestRelationalGNN:
             hidden_dim=64,
             num_layers=2,
             num_heads=2,
+        )
+
+    @pytest.fixture
+    def gnn_model_with_conditioning(self):
+        """Create a RelationalGNN with global conditioning."""
+        from gnn_reasoner.model import RelationalGNN
+
+        return RelationalGNN(
+            node_input_dim=5,
+            edge_input_dim=2,
+            hidden_dim=64,
+            num_layers=2,
+            num_heads=2,
+            use_global_conditioning=True,
+            global_dim=2,
         )
 
     def test_forward_output_structure(self, gnn_model, sample_graph):
@@ -377,6 +519,65 @@ class TestRelationalGNN:
 
         assert "nodes" in json_data
         assert "edges" in json_data
+
+    def test_forward_with_global_context(self, gnn_model_with_conditioning):
+        """Test forward pass with explicit global context u."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+        from gnn_reasoner.camera import Object3D
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.randn(14)
+        
+        # Use to_graph_with_objects which sets graph.u
+        mock_obj = Object3D(
+            class_name="cup",
+            confidence=0.9,
+            position=(0.3, 0.0, 0.1),
+            size=(0.05, 0.08),
+            bbox=(100, 100, 200, 200),
+        )
+        graph = transformer.to_graph_with_objects(state, [mock_obj], gripper_state=0.02)
+
+        outputs = gnn_model_with_conditioning(graph)
+
+        assert "predicate_logits" in outputs
+        assert outputs["predicate_logits"].shape[0] == graph.edge_index.shape[1]
+
+    def test_conditioning_affects_is_holding(self, gnn_model_with_conditioning):
+        """Test that gripper state affects is_holding predictions."""
+        from gnn_reasoner.lerobot_transformer import (
+            LeRobotGraphTransformer,
+            ALOHA_KINEMATIC_CHAIN,
+        )
+        from gnn_reasoner.camera import Object3D
+
+        transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
+        state = torch.randn(14)
+        
+        mock_obj = Object3D(
+            class_name="cup",
+            confidence=0.9,
+            position=(0.3, 0.0, 0.1),
+            size=(0.05, 0.08),
+            bbox=(100, 100, 200, 200),
+        )
+
+        # Create two graphs: one with closed gripper, one with open
+        graph_closed = transformer.to_graph_with_objects(state, [mock_obj], gripper_state=0.0)
+        graph_open = transformer.to_graph_with_objects(state, [mock_obj], gripper_state=0.08)
+
+        with torch.no_grad():
+            out_closed = gnn_model_with_conditioning(graph_closed)
+            out_open = gnn_model_with_conditioning(graph_open)
+
+        # Outputs should be different
+        assert not torch.allclose(
+            out_closed["predicate_logits"],
+            out_open["predicate_logits"],
+        )
 
 
 # ==============================================================================

@@ -2,6 +2,8 @@
 
 These tools expose the RelationalGNN's prediction capabilities
 for world graph analysis and action outcome prediction.
+
+Includes Phase 10.3: Pre-Execution Simulation via ForwardDynamicsModel.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
     from gnn_reasoner.data_manager import DataManager
     from gnn_reasoner.lerobot_transformer import LeRobotGraphTransformer
     from gnn_reasoner.model.relational_gnn import RelationalGNN
+    from gnn_reasoner.model.forward_dynamics import ForwardDynamicsModel
 
 logger = structlog.get_logger()
 
@@ -30,6 +33,7 @@ class PredictionToolsManager:
         data_manager: DataManager,
         graph_transformer: LeRobotGraphTransformer,
         gnn_model: RelationalGNN,
+        forward_model: ForwardDynamicsModel | None = None,
     ):
         """Initialize prediction tools manager.
 
@@ -37,10 +41,12 @@ class PredictionToolsManager:
             data_manager: DataManager for LeRobot dataset access
             graph_transformer: Transformer for state-to-graph conversion
             gnn_model: RelationalGNN model for predictions
+            forward_model: Optional ForwardDynamicsModel for pre-execution simulation
         """
         self.data_manager = data_manager
         self.graph_transformer = graph_transformer
         self.gnn_model = gnn_model
+        self.forward_model = forward_model
         self._inference_times: list[float] = []
 
     def get_world_graph(self, frame_idx: int | None = None, threshold: float = 0.5) -> dict:
@@ -254,10 +260,112 @@ class PredictionToolsManager:
             return 0.0
         return sum(self._inference_times) / len(self._inference_times)
 
+    def simulate_action(
+        self,
+        action_sequence: list[list[float]] | None = None,
+        num_steps: int = 1,
+        confidence_threshold: float = 0.7,
+    ) -> dict:
+        """Simulate an action sequence using the forward dynamics model.
+        
+        This is the key tool for LLM plan verification (Phase 10.3).
+        Returns confidence scores and feasibility assessment before execution.
 
-def get_prediction_tools() -> list[Tool]:
-    """Get list of prediction-related MCP tools."""
-    return [
+        Args:
+            action_sequence: List of action vectors to simulate.
+                            If None, uses actions from dataset.
+            num_steps: Number of forward steps (used if action_sequence is None)
+            confidence_threshold: Minimum confidence to consider feasible
+
+        Returns:
+            Simulation result with confidence, feasibility, and recommendation
+        """
+        import torch
+
+        start_time = time.perf_counter()
+
+        # Check if forward model is available
+        if self.forward_model is None:
+            return {
+                "error": "Forward dynamics model not loaded. "
+                        "Train with: python scripts/train_forward_model.py",
+                "recommendation": "UNAVAILABLE",
+            }
+
+        # Get current state
+        frame = self.data_manager.get_current_frame()
+        state = frame.get("observation.state")
+
+        if state is None:
+            return {"error": "No observation state available"}
+
+        if not isinstance(state, torch.Tensor):
+            state = torch.tensor(state, dtype=torch.float32)
+
+        # Build current graph
+        graph_data = self.graph_transformer.to_graph(state)
+        device = next(self.forward_model.parameters()).device
+        graph_data = graph_data.to(device)
+
+        # Prepare action sequence
+        if action_sequence is not None:
+            actions = [
+                torch.tensor(a, dtype=torch.float32, device=device)
+                for a in action_sequence
+            ]
+        else:
+            # Get actions from dataset
+            actions = []
+            frame_idx = self.data_manager._current_frame_idx
+            for step in range(num_steps):
+                next_idx = min(frame_idx + step, len(self.data_manager) - 1)
+                frame = self.data_manager.get_frame(next_idx)
+                action_data = frame.get("action")
+                if action_data is not None:
+                    if not isinstance(action_data, torch.Tensor):
+                        action_data = torch.tensor(action_data, dtype=torch.float32)
+                    actions.append(action_data.to(device))
+                else:
+                    break
+
+        if not actions:
+            return {"error": "No actions to simulate"}
+
+        # Run simulation
+        self.forward_model.eval()
+        results = self.forward_model.simulate(
+            graph_data, actions, return_trajectory=True
+        )
+
+        # Convert to MCP response
+        response = self.forward_model.to_mcp_response(results)
+
+        inference_time = (time.perf_counter() - start_time) * 1000
+        self._inference_times.append(inference_time)
+
+        # Add metadata
+        response["frame_index"] = self.data_manager._current_frame_idx
+        response["inference_time_ms"] = round(inference_time, 3)
+        response["confidence_threshold"] = confidence_threshold
+
+        # Override recommendation based on threshold
+        if response["min_confidence"] < confidence_threshold:
+            response["recommendation"] = "REPLAN"
+            response["reason"] = (
+                f"Confidence {response['min_confidence']:.2f} below "
+                f"threshold {confidence_threshold:.2f}"
+            )
+
+        return response
+
+
+def get_prediction_tools(include_simulate: bool = True) -> list[Tool]:
+    """Get list of prediction-related MCP tools.
+    
+    Args:
+        include_simulate: If True, include simulate_action tool (requires ForwardDynamicsModel)
+    """
+    tools = [
         Tool(
             name="get_world_graph",
             description=(
@@ -362,6 +470,54 @@ def get_prediction_tools() -> list[Tool]:
         ),
     ]
 
+    # Add simulate_action tool if requested (Phase 10.3)
+    if include_simulate:
+        tools.append(
+            Tool(
+                name="simulate_action",
+                description=(
+                    "VERIFY a planned action sequence BEFORE physical execution. "
+                    "Uses the forward dynamics model to predict world state changes. "
+                    "Returns confidence scores, feasibility assessment, and EXECUTE/REPLAN recommendation. "
+                    "CRITICAL for LLM plan verification - always call this before executing complex maneuvers."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "action_sequence": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": {"type": "number"},
+                                "description": "Single action vector (14 floats for ALOHA)",
+                            },
+                            "description": (
+                                "Sequence of action vectors to simulate. "
+                                "Each action is a 14-dimensional joint velocity command."
+                            ),
+                        },
+                        "num_steps": {
+                            "type": "integer",
+                            "description": "Number of steps to simulate (if action_sequence not provided)",
+                            "minimum": 1,
+                            "maximum": 20,
+                            "default": 1,
+                        },
+                        "confidence_threshold": {
+                            "type": "number",
+                            "description": "Minimum confidence to recommend execution (0.0-1.0)",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                            "default": 0.7,
+                        },
+                    },
+                    "required": [],
+                },
+            )
+        )
+
+    return tools
+
 
 async def handle_prediction_tool(
     name: str, arguments: dict[str, Any], tools_manager: PredictionToolsManager
@@ -418,6 +574,17 @@ async def handle_prediction_tool(
             graph = graph.to(device)
             result = tools_manager.gnn_model.to_world_context(graph, threshold)
             result["frame_index"] = tools_manager.data_manager._current_frame_idx
+
+    elif name == "simulate_action":
+        # Phase 10.3: Pre-Execution Simulation
+        action_sequence = arguments.get("action_sequence")
+        num_steps = arguments.get("num_steps", 1)
+        confidence_threshold = arguments.get("confidence_threshold", 0.7)
+        result = tools_manager.simulate_action(
+            action_sequence=action_sequence,
+            num_steps=num_steps,
+            confidence_threshold=confidence_threshold,
+        )
 
     else:
         result = {"error": f"Unknown tool: {name}"}

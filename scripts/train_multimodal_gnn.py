@@ -42,11 +42,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-# GPU profiles (same as train_relational_gnn.py)
+# GPU profiles for different hardware
 GPU_PROFILES = {
     "RTX 500 Ada (4GB)": {
         "batch_size": 8,
         "accumulation_steps": 8,
+        "use_amp": True,
+    },
+    "RTX 3070 (8GB)": {
+        "batch_size": 16,
+        "accumulation_steps": 4,
         "use_amp": True,
     },
     "RTX 4080 (16GB)": {
@@ -246,8 +251,11 @@ def detect_gpu_profile() -> tuple[str, dict]:
 
     logger.info(f"Detected GPU: {gpu_name} ({vram_gb:.1f}GB)")
 
+    # Select profile based on VRAM
     if vram_gb >= 12:
         return "RTX 4080 (16GB)", GPU_PROFILES["RTX 4080 (16GB)"]
+    elif vram_gb >= 6:
+        return "RTX 3070 (8GB)", GPU_PROFILES["RTX 3070 (8GB)"]
     else:
         return "RTX 500 Ada (4GB)", GPU_PROFILES["RTX 500 Ada (4GB)"]
 
@@ -668,7 +676,7 @@ def main():
     parser.add_argument("--repo", type=str, default="lerobot/aloha_static_coffee")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic data")
     parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--max-frames", type=int, default=5000)
+    parser.add_argument("--max-frames", type=int, default=None, help="Max frames (None=full dataset)")
     parser.add_argument("--output", type=str, default="experiments/multimodal_training")
     parser.add_argument("--vision-model", type=str, default="dinov2_vits14")
     parser.add_argument("--no-vision", action="store_true", help="Disable vision features")

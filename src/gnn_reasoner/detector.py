@@ -259,14 +259,25 @@ class VisionDetector:
         with torch.no_grad():
             outputs = self._model(**inputs)
 
-        # Post-process
-        results = self._processor.post_process_grounded_object_detection(
-            outputs,
-            inputs["input_ids"],
-            box_threshold=self.confidence_threshold,
-            text_threshold=self.confidence_threshold,
-            target_sizes=[pil_image.size[::-1]],  # (H, W)
-        )[0]
+        # Post-process - API changed in newer transformers versions
+        # Try new API first, fall back to old API
+        try:
+            # New API (transformers >= 4.40): threshold instead of box_threshold/text_threshold
+            results = self._processor.post_process_grounded_object_detection(
+                outputs,
+                inputs["input_ids"],
+                threshold=self.confidence_threshold,
+                target_sizes=[pil_image.size[::-1]],  # (H, W)
+            )[0]
+        except TypeError:
+            # Old API (transformers < 4.40)
+            results = self._processor.post_process_grounded_object_detection(
+                outputs,
+                inputs["input_ids"],
+                box_threshold=self.confidence_threshold,
+                text_threshold=self.confidence_threshold,
+                target_sizes=[pil_image.size[::-1]],  # (H, W)
+            )[0]
 
         detections = []
         for box, score, label in zip(

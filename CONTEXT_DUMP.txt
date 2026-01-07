@@ -87,11 +87,16 @@ src/
       scene_gnn.py         # Original SceneGNN (deprecated)
       graph_encoder.py     # GraphEncoder
       relational_gnn.py    # RelationalGNN, NodeEncoder, EdgeEncoder, PredicateHead
+      multimodal_gnn.py    # MultiModalGNN, VisionEncoder, CrossAttentionFusion
+      forward_dynamics.py  # ForwardDynamicsModel (Phase 10.3)
 scripts/
   train_relational_gnn.py      # Training script with GPU profiles
+  train_multimodal_gnn.py      # MultiModalGNN training script
+  train_forward_model.py       # ForwardDynamicsModel training (Phase 10.3)
   demo_lerobot_pipeline.py     # Full pipeline demo
   demo_mcp_client.py           # MCP client E2E demo
   generate_thesis_figures.py   # Matplotlib figure generation
+  compare_models.py            # Option A vs C benchmark
   test_mcp_connection.py       # Basic connection test
 experiments/
   aloha_training/
@@ -110,7 +115,7 @@ thesis/
   sections/*.tex
 
 [MCP_TOOLS_REGISTERED]
-total_tools: 13
+total_tools: 14
 motion_tools:
   - move: linear_x, angular_z, duration_ms -> moves robot
   - set_velocity: linear_x, angular_z -> continuous velocity
@@ -127,6 +132,7 @@ prediction_tools:
   - advance_frame: -> next dataset frame
   - set_frame: frame_idx -> set specific frame
   - get_predicates: threshold -> active predicates
+  - simulate_action: action_sequence[], confidence_threshold -> EXECUTE/REPLAN recommendation (Phase 10.3)
 
 [MCP_RESOURCES_REGISTERED]
 total_resources: 13
@@ -325,23 +331,33 @@ problem_7:
 [GPU_PROFILE_CONFIGURATIONS]
 rtx500_profile:
   name: RTX 500 Ada (4GB)
-  batch_size: 16
+  batch_size: 16 (relational) / 8 (multimodal)
   effective_batch_size: 64
-  accumulation_steps: 4
+  accumulation_steps: 4 / 8
   use_amp: true
+  vram_threshold: < 6GB
+  
+rtx3070_profile:
+  name: RTX 3070 (8GB)
+  batch_size: 32 (relational) / 16 (multimodal)
+  effective_batch_size: 64
+  accumulation_steps: 2 / 4
+  use_amp: true
+  vram_threshold: 6-12GB
   
 rtx4080_profile:
   name: RTX 4080 (16GB)
-  batch_size: 64
+  batch_size: 64 (relational) / 32 (multimodal)
   effective_batch_size: 64
-  accumulation_steps: 1
+  accumulation_steps: 1 / 2
   use_amp: true
+  vram_threshold: >= 12GB
 
 cpu_profile:
   name: CPU Fallback
-  batch_size: 8
+  batch_size: 8 (relational) / 4 (multimodal)
   effective_batch_size: 64
-  accumulation_steps: 8
+  accumulation_steps: 8 / 16
   use_amp: false
 
 [KEY_CODE_PATTERNS]
@@ -415,6 +431,15 @@ train_synthetic:
 train_real:
   python scripts/train_relational_gnn.py --repo lerobot/aloha_static_coffee --epochs 100 --max-frames 5000 --output experiments/aloha_training
 
+train_multimodal:
+  python scripts/train_multimodal_gnn.py --repo lerobot/aloha_static_coffee --epochs 100 --output experiments/multimodal
+
+train_forward_dynamics:
+  # Quick test (RTX 500)
+  python scripts/train_forward_model.py --max-frames 1000 --epochs 10
+  # Full training (RTX 3070 recommended)
+  python scripts/train_forward_model.py --repo lerobot/aloha_static_coffee --epochs 100 --gnn-checkpoint experiments/aloha_training/best_model.pt --output experiments/forward_dynamics
+
 demo_pipeline:
   python scripts/demo_lerobot_pipeline.py --synthetic --frames 100
   python scripts/demo_lerobot_pipeline.py --repo lerobot/aloha_static_coffee --frames 100 -v
@@ -422,8 +447,12 @@ demo_pipeline:
 demo_mcp:
   python scripts/demo_mcp_client.py
 
+compare_models:
+  python scripts/compare_models.py --model-a experiments/aloha_training/best_model.pt --model-c experiments/multimodal_aloha/best_model.pt --frames 500
+
 generate_figures:
   python scripts/generate_thesis_figures.py
+  python scripts/generate_comparison_figures.py
 
 [THESIS_STRUCTURE]
 chapters:
@@ -490,6 +519,8 @@ training_history.json:
 8. ✅ Vision integration (MultiModalGNN, +35.6% is_near F1)
 9. ✅ LLM agent integration (Llama3.2 via Ollama)
 10. ✅ Thesis core demo validated (LLM → MCP → GNN E2E)
+11. ✅ Class imbalance fix (ConditionalPredicateHead, is_holding F1: 0→0.914)
+12. ✅ Test suite updated (9 new tests for global context conditioning)
 
 [REMAINING_TASKS]
 1. Physical robot deployment
@@ -756,19 +787,276 @@ files_modified:
 
 status: ✅ COMPLETE - is_holding detection working
 
+[2026-01-07] Phase 10.3: Pre-Execution Simulation
+  ✅ Created ForwardDynamicsModel (259K params)
+  ✅ Created train_forward_model.py training script
+  ✅ Added simulate_action MCP tool for LLM plan verification
+  ✅ Validated on RTX 500 (1k frames, 10 epochs, 9.7 min)
+  ✅ Delta error: 0.0042 → 0.0009 (78% reduction)
+  ✅ Updated MasterPlan.md with Phase 10.3 documentation
+
+  Architecture:
+    - ActionEncoder: 14-DoF action → hidden_dim embedding
+    - DynamicsNetwork: [graph_embed, action_embed] → state delta + uncertainty
+    - FeasibilityHead: Binary classifier for physical plausibility
+    - ConfidenceHead: Epistemic uncertainty estimation
+
+  MCP Tool Interface:
+    name: simulate_action
+    description: VERIFY planned action sequence BEFORE physical execution
+    returns: { recommendation: "EXECUTE" | "REPLAN", confidence: 0.85, trajectory: [...] }
+
+  Files Created:
+    - src/gnn_reasoner/model/forward_dynamics.py
+    - scripts/train_forward_model.py
+  
+  Files Modified:
+    - src/gnn_reasoner/model/__init__.py (exports)
+    - src/mcp_ros2_bridge/tools/prediction.py (simulate_action tool)
+
+[TEST_UPDATES]
+date: 2026-01-07
+reason: Tests needed for new ConditionalPredicateHead and extract_global_context()
+
+new_tests_added:
+  - TestGlobalContextConditioning::test_extract_global_context_from_state
+  - TestGlobalContextConditioning::test_extract_global_context_with_explicit_gripper
+  - TestGlobalContextConditioning::test_graph_has_u_attribute
+  - TestGlobalContextConditioning::test_closed_gripper_context
+  - TestConditionalPredicateHead::test_head_creation
+  - TestConditionalPredicateHead::test_head_forward
+  - TestConditionalPredicateHead::test_different_gripper_states_produce_different_outputs
+  - TestRelationalGNN::test_forward_with_global_context
+  - TestRelationalGNN::test_conditioning_affects_is_holding
+
+file_modified: tests/test_lerobot_pipeline.py
+
+test_summary:
+  test_lerobot_pipeline.py: 39 passed
+  test_multimodal_gnn.py: 14 passed
+  test_vision_pipeline.py: 26 passed
+  test_graph_builder.py: 9 passed
+  test_mcp_tools.py: 10 passed
+  test_agent_swap.py: 2 failed (pre-existing, needs pytest-asyncio)
+  total: 102 tests, 100 passed, 2 failed (pre-existing)
+
+notes:
+  - All new conditioning tests pass
+  - Existing tests remain backward compatible (fallback to u=0.5 if missing)
+  - test_agent_swap.py failures are pre-existing (async tests need pytest-asyncio)
+
+[REMOTE_TRAINING_RTX3070]
+date: 2026-01-07
+machine: cip7g1.cip.cs.fau.de (xi58pizy)
+gpu: NVIDIA GeForce RTX 3070 (8.2GB VRAM)
+working_dir: /proj/ciptmp/xi58pizy/AI2MCP
+
+training_results:
+  relational_gnn:
+    status: ✅ COMPLETE
+    accuracy: 98.96%
+    epochs: 100
+    training_time: ~29 min
+    checkpoint: experiments/remote_training/relational_gnn/best_model.pt
+    
+  multimodal_gnn:
+    status: ⚠️ COMPLETE but POOR PERFORMANCE
+    accuracy: ~46% (expected >90%)
+    issue: Needs investigation - possible training/eval mismatch
+    checkpoint: NOT FOUND (training may have been interrupted)
+
+benchmark_results_honest_latency:
+  run_1_depth_anything:
+    depth_model: Depth Anything V2 Small
+    option_a_accuracy: 95.1%
+    option_a_latency_breakdown:
+      detection_grounding_dino: 234.4ms
+      depth_estimation: 61.3ms
+      gnn_inference: 1.4ms
+      total_e2e: 297.2ms
+    option_a_f1_is_near: 0.894
+    option_c_accuracy: 47.6% (PROBLEM)
+    
+  run_2_midas:
+    depth_model: MiDaS (fallback, relative depth only)
+    option_a_accuracy: 97.0%
+    option_a_latency_breakdown:
+      detection_grounding_dino: 217.2ms
+      depth_estimation: 113.4ms
+      gnn_inference: 1.4ms
+      total_e2e: 332.0ms
+    option_a_f1_is_near: 0.954
+    option_c_accuracy: 45.5% (PROBLEM)
+
+key_findings:
+  - ✅ Honest E2E latency measured: ~300ms (not fake 2.4ms from mocks)
+  - ✅ RelationalGNN works well with real vision (95-97% accuracy)
+  - ✅ Depth Anything V2 is faster (61ms) than MiDaS (113ms)
+  - ⚠️ MultiModalGNN has severe accuracy problem (~46%)
+  - ⚠️ ZoeDepth failed to load (timm version mismatch, fell back to MiDaS)
+
+issues_encountered:
+  1. timm_version_mismatch:
+     symptom: "cannot import name 'RotaryEmbedding' from 'timm.layers'"
+     cause: timm 1.0.23 incompatible with ZoeDepth
+     attempted_fix: Downgraded to timm 0.9.16
+     result: Still fell back to MiDaS (additional dependencies needed)
+     
+  2. grounding_dino_api_change:
+     symptom: "got unexpected keyword argument 'box_threshold'"
+     cause: transformers 4.57.3 changed API
+     fix: Added try/except fallback in detector.py
+     
+  3. disk_quota_warning:
+     symptom: "You have exceeded your disk quota"
+     cause: ZoeDepth download (1.35GB) to ~/.cache
+     status: Resolved (82% usage, within limits)
+     
+  5. wrong_gpu_profile_detection:
+     symptom: RTX 3070 (8GB) detected as "RTX 500 Ada (4GB)" profile
+     cause: detect_gpu_profile() only had 2 tiers (>=12GB or fallback)
+     fix: Added RTX 3070 profile for 6-12GB VRAM GPUs
+     files_fixed:
+       - scripts/train_multimodal_gnn.py
+       - scripts/train_relational_gnn.py
+     result: Proper batch_size selection (16 instead of 8 for multimodal)
+     
+  4. multimodal_gnn_poor_performance:
+     symptom: 46% accuracy vs expected 90%+
+     status: ✅ ROOT CAUSE IDENTIFIED
+     root_cause: Training never completed - stuck at 30% data processing
+       - Phase 2 (MultiModalGNN) started after Phase 1 (RelationalGNN) in same session
+       - Data processing stopped at 16,245/55,000 frames (30%)
+       - No checkpoint file was ever created
+       - compare_models.py loaded random/uninitialized weights
+       - Random model produces ~46% accuracy (near random for 9 predicates)
+     fix: Re-running training with 10k frames (faster iteration)
+
+[COMPARISON_RESULTS_PRELIMINARY]
+date: 2026-01-07
+status: ⚠️ UNFAIR COMPARISON - Different training data sizes
+models_compared:
+  option_a: RelationalGNN (kinematic + geometric vision fusion)
+  option_c: MultiModalGNN (DINOv2 + cross-attention fusion)
+
+training_summary:
+  relational_gnn:
+    dataset: ALOHA 55k frames  # ← FULL DATASET
+    accuracy: 98.96%
+    training_time: 29 min
+    checkpoint: experiments/remote_training/relational_gnn/best_model.pt
+    
+  multimodal_gnn:
+    dataset: ALOHA 10k frames  # ← SUBSET ONLY (5.5× less data)
+    accuracy: 97.14%
+    training_time: 40 min (100 epochs)
+    checkpoint: experiments/remote_training/multimodal_gnn_10k/best_model.pt
+
+⚠️ FAIR_COMPARISON_LIMITATION:
+  issue: RelationalGNN trained on 55k frames, MultiModalGNN on only 10k frames
+  impact: Option A had 5.5× more training data - comparison is not apples-to-apples
+  action_required: Train MultiModalGNN on full 55k frames (~3.5 hours)
+  scheduled: Tonight (user will run manually)
+  command: |
+    ssh xi58pizy@cip7g1.cip.cs.fau.de
+    cd /proj/ciptmp/xi58pizy/AI2MCP
+    nohup python scripts/train_multimodal_gnn.py \
+        --repo lerobot/aloha_static_coffee \
+        --epochs 100 \
+        --output experiments/remote_training/multimodal_gnn_55k \
+        2>&1 | tee experiments/remote_training/multimodal_gnn_55k/training.log &
+
+preliminary_benchmark_results:
+  note: These results are PRELIMINARY due to unfair training data split
+  
+  micro_accuracy:
+    option_a: 96.59% (trained on 55k)
+    option_c: 95.69% (trained on 10k)
+    winner: A (+0.9%) - but unfair comparison
+    
+  macro_f1:
+    option_a: 0.341
+    option_c: 0.359
+    winner: C (+5.3%) - despite less training data!
+    
+  latency_mean_ms:
+    option_a: 1.50
+    option_c: 24.95
+    winner: A (17× faster) - architecture difference, not training
+
+per_predicate_f1:
+  is_near:        A=0.942, C=0.906  # A wins (more data)
+  is_left_of:     A=0.962, C=0.947  # A wins (more data)
+  is_right_of:    A=0.958, C=0.946  # A wins (more data)
+  is_approaching: A=0.116, C=0.234  # C wins +101% DESPITE less data!
+  is_retracting:  A=0.088, C=0.200  # C wins +127% DESPITE less data!
+  is_holding:     A=0.000, C=0.000  # Tie (needs more training data)
+  is_contacting:  A=0.000, C=0.000  # Tie (needs more training data)
+
+preliminary_insight: |
+  Even with 5.5× LESS training data, Option C (MultiModalGNN) still 
+  outperforms on TEMPORAL/DYNAMIC predicates:
+    - is_approaching: +101% better
+    - is_retracting: +127% better
+  
+  This suggests vision integration provides genuine value for motion 
+  understanding that kinematics alone cannot capture.
+  
+  PENDING: Fair comparison after training MultiModalGNN on 55k frames.
+
 [CURRENT_FOCUS]
-task: Class Imbalance Fix for Interaction Predicates
-status: ✅ IMPLEMENTED
-next_steps:
-  - Retrain models with WeightedFocalLoss
-  - Re-run comparison benchmarks
-  - Verify is_holding F1 > 0.0
+task: Fair Comparison - Train MultiModalGNN on 55k frames
+status: ⏳ SCHEDULED FOR TONIGHT
+
+completed:
+  - ✅ Remote training infrastructure (remote_train.sh)
+  - ✅ RelationalGNN training (98.96% accuracy, 55k frames)
+  - ✅ MultiModalGNN training (97.14% accuracy, 10k frames) - preliminary
+  - ✅ Honest latency benchmarks (297-332ms E2E with real vision)
+  - ✅ Preliminary comparison benchmark
+  - ✅ ConditionalPredicateHead implemented
+  - ✅ extract_global_context() implemented
+  - ✅ Test suite updated (9 new tests, all pass)
+  - ✅ MultiModalGNN investigation COMPLETE (root cause: training never finished)
+  - ✅ Identified unfair comparison (55k vs 10k training data)
+  - ✅ Phase 10.3: ForwardDynamicsModel implemented (259K params)
+  - ✅ Phase 10.3: simulate_action MCP tool added
+  - ✅ Phase 10.3: Validated on RTX 500 (delta error 78% reduction)
+
+pending_tonight:
+  - ⏳ Train MultiModalGNN on 55k frames (~3.5 hours)
+  - ⏳ [Optional] Train ForwardDynamicsModel on 55k frames
+  - Re-run comparison benchmark with fair models
+  - Generate thesis figures with final data
+
+command_for_tonight: |
+  # SSH into remote machine
+  ssh xi58pizy@cip7g1.cip.cs.fau.de
+  
+  # Load modules and activate env
+  module load cuda/12.0 python3/anaconda-2024.07
+  source $(conda info --base)/etc/profile.d/conda.sh
+  conda activate /proj/ciptmp/xi58pizy/.conda/envs/ai2mcp
+  cd /proj/ciptmp/xi58pizy/AI2MCP
+  
+  # Create output dir
+  mkdir -p experiments/remote_training/multimodal_gnn_55k
+  
+  # Start training in background
+  nohup python scripts/train_multimodal_gnn.py \
+      --repo lerobot/aloha_static_coffee \
+      --epochs 100 \
+      --output experiments/remote_training/multimodal_gnn_55k \
+      2>&1 | tee experiments/remote_training/multimodal_gnn_55k/training.log &
+  
+  # Check progress
+  tail -f experiments/remote_training/multimodal_gnn_55k/training.log
+
 deferred:
   - Claude agent testing (revisit later)
-  - Edge-native perception stack (YOLO-World + DepthAnything)
+  - ZoeDepth proper installation (requires zoedepth pip package)
   - Gazebo simulation
   - Physical robot deployment
-  - Fix MCP resource bug (library issue, low priority)
 
 [OLLAMA_SETUP]
 status: ✅ installed_and_running
@@ -777,6 +1065,70 @@ model: llama3.2:latest (2.0 GB, 3B params)
 api_endpoint: http://localhost:11434
 installed_at: 2026-01-06
 test_result: SUCCESS (3 steps, 5.3s, 16 nodes, 54 edges)
+
+[FORWARD_DYNAMICS_MODEL]
+purpose: Pre-Execution Simulation for LLM plan verification (Phase 10.3)
+status: ✅ IMPLEMENTED
+
+architecture:
+  model_name: ForwardDynamicsModel
+  total_parameters: 259,522
+  components:
+    - ActionEncoder: MLP(14 -> hidden_dim), encodes 14-DoF ALOHA actions
+    - DynamicsNetwork: MLP([graph+action] -> state_delta + uncertainty)
+    - FeasibilityHead: Binary classifier for physical plausibility
+    - ConfidenceHead: Sigmoid output for epistemic uncertainty
+  inputs:
+    - graph_embed: From RelationalGNN encoder (frozen or learned)
+    - action: 14-dimensional joint velocity vector
+  outputs:
+    - delta: (num_nodes, 3) predicted position change
+    - uncertainty: (num_nodes,) per-node uncertainty
+    - confidence: Scalar [0, 1] global confidence
+    - feasibility: Binary feasibility prediction
+
+training_validation:
+  device: RTX 500 Ada (4GB)
+  dataset: lerobot/aloha_static_coffee
+  frames: 1000
+  epochs: 10
+  batch_size: 16
+  training_time: 9.7 minutes
+  delta_error_initial: 0.0042
+  delta_error_final: 0.0009
+  improvement: 78% reduction
+
+loss_function: ForwardDynamicsLoss
+  components:
+    - delta_weight: 1.0 (MSE on position delta)
+    - uncertainty_weight: 0.1 (NLL with predicted variance)
+    - feasibility_weight: 0.5 (BCE on feasibility)
+    - consistency_weight: 0.1 (temporal smoothness)
+
+mcp_tool:
+  name: simulate_action
+  description: |
+    VERIFY a planned action sequence BEFORE physical execution.
+    Returns confidence scores, feasibility assessment, and EXECUTE/REPLAN recommendation.
+  input_schema:
+    action_sequence: array of 14-dim action vectors
+    num_steps: int (1-20)
+    confidence_threshold: float (0.0-1.0, default 0.7)
+  output:
+    recommendation: "EXECUTE" | "REPLAN"
+    min_confidence: float
+    overall_feasible: bool
+    trajectory: list of per-step results
+
+files:
+  - src/gnn_reasoner/model/forward_dynamics.py (ForwardDynamicsModel, Loss, SimulationResult)
+  - scripts/train_forward_model.py (training script)
+  - src/mcp_ros2_bridge/tools/prediction.py (simulate_action handler)
+
+next_steps:
+  - Full training on 55k frames (RTX 3070)
+  - Integration test with Llama agent
+  - Benchmark LLM plans with/without simulation verification
 
 ================================================================================
 END CONTEXT DUMP
