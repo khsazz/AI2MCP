@@ -119,36 +119,205 @@ def detect_gpu_profile() -> str:
 
 
 # =============================================================================
+# Class Imbalance Handling
+# =============================================================================
+
+# Predicate indices
+HOLDING_IDX = 5
+CONTACTING_IDX = 6
+APPROACHING_IDX = 7
+RETRACTING_IDX = 8
+
+
+class WeightedFocalLoss(nn.Module):
+    """Focal Loss with per-class positive weights.
+    
+    Addresses class imbalance where interaction predicates are rare.
+    """
+    
+    def __init__(
+        self,
+        alpha: float = 0.25,
+        gamma: float = 2.0,
+        pos_weight: torch.Tensor | None = None,
+    ):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.pos_weight = pos_weight
+        
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+        probs = torch.sigmoid(inputs)
+        pt = targets * probs + (1 - targets) * (1 - probs)
+        focal_weight = (1 - pt) ** self.gamma
+        alpha_weight = targets * self.alpha + (1 - targets) * (1 - self.alpha)
+        focal_loss = alpha_weight * focal_weight * bce_loss
+        
+        if self.pos_weight is not None:
+            pos_weight = self.pos_weight.to(inputs.device)
+            weight_matrix = pos_weight.unsqueeze(0).expand_as(targets)
+            class_weight = torch.where(targets > 0.5, weight_matrix, torch.ones_like(weight_matrix))
+            focal_loss = focal_loss * class_weight
+        
+        return focal_loss.mean()
+
+
+def compute_class_weights(dataset: list, num_predicates: int = 9) -> torch.Tensor:
+    """Compute per-class weights from dataset label distribution."""
+    pos_counts = torch.zeros(num_predicates)
+    neg_counts = torch.zeros(num_predicates)
+    
+    for graph in dataset:
+        labels = graph.y
+        if labels is None or labels.numel() == 0:
+            continue
+        pos_counts += (labels > 0.5).float().sum(dim=0).cpu()
+        neg_counts += (labels <= 0.5).float().sum(dim=0).cpu()
+    
+    total = pos_counts + neg_counts
+    pos_ratio = pos_counts / (total + 1e-8)
+    neg_ratio = neg_counts / (total + 1e-8)
+    weights = (neg_ratio / (pos_ratio + 1e-8)).clamp(1.0, 50.0)
+    
+    # Minimum weights for critical predicates
+    weights[HOLDING_IDX] = max(weights[HOLDING_IDX].item(), 20.0)
+    weights[CONTACTING_IDX] = max(weights[CONTACTING_IDX].item(), 10.0)
+    weights[APPROACHING_IDX] = max(weights[APPROACHING_IDX].item(), 5.0)
+    weights[RETRACTING_IDX] = max(weights[RETRACTING_IDX].item(), 5.0)
+    
+    return weights
+
+
+# =============================================================================
 # Data Loading
 # =============================================================================
 
 def create_synthetic_dataset(
     num_samples: int = 1000,
     num_joints: int = 16,
+    holding_ratio: float = 0.30,  # 30% holding frames (increased for learning)
+    contacting_ratio: float = 0.10,  # 10% contacting frames
 ) -> list[Data]:
-    """Create synthetic graph dataset for training."""
+    """Create synthetic graph dataset for training with interaction scenarios.
+    
+    Generates holding/contacting scenarios by placing objects near grippers.
+    
+    Args:
+        num_samples: Total samples to generate
+        num_joints: Number of robot joints (ignored, uses ALOHA)
+        holding_ratio: Fraction of samples with is_holding=True
+        contacting_ratio: Fraction of samples with is_contacting=True
+    """
     from gnn_reasoner.lerobot_transformer import (
         LeRobotGraphTransformer,
         ALOHA_KINEMATIC_CHAIN,
         add_predicate_labels,
     )
+    from gnn_reasoner.camera import Object3D
+    import numpy as np
+    
+    num_holding = int(num_samples * holding_ratio)
+    num_contacting = int(num_samples * contacting_ratio)
+    num_normal = num_samples - num_holding - num_contacting
     
     print(f"Generating {num_samples} synthetic training samples...")
+    print(f"  Holding: {num_holding}, Contacting: {num_contacting}, Normal: {num_normal}")
+    
     transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
     
     torch.manual_seed(42)
+    np.random.seed(42)
     dataset = []
     prev_graph = None
     
     for i in range(num_samples):
+        # Determine scenario type
+        if i < num_holding:
+            scenario = "holding"
+        elif i < num_holding + num_contacting:
+            scenario = "contacting"
+        else:
+            scenario = "normal"
+        
         # Generate random state with smooth transitions
         if i == 0:
             state = torch.randn(14) * 0.5
         else:
-            # Smooth transition from previous state
             state = dataset[-1].x[:14, 0] + torch.randn(14) * 0.1
         
-        graph = transformer.to_graph(state)
+        # First create base graph to get gripper positions
+        base_graph = transformer.to_graph(state)
+        left_gripper_pos, right_gripper_pos = transformer.get_gripper_positions(base_graph)
+        
+        if scenario == "holding":
+            # HOLDING: Object at gripper, gripper closed
+            gripper_state = float(np.random.uniform(0.0, 0.25))
+            
+            if left_gripper_pos is not None and np.random.random() < 0.5:
+                gripper_pos = left_gripper_pos.numpy()
+            elif right_gripper_pos is not None:
+                gripper_pos = right_gripper_pos.numpy()
+            else:
+                gripper_pos = np.array([0.0, 0.0, 0.0])
+            
+            # Object very close to gripper (within 0.08m holding threshold)
+            offset = np.random.uniform(-0.03, 0.03, size=3)
+            object_pos = tuple(gripper_pos + offset)
+            
+            objects_3d = [Object3D(
+                class_name="held_cup",
+                confidence=np.random.uniform(0.9, 0.99),
+                position=object_pos,
+                size=(0.05, 0.08),
+                bbox=(300, 200, 360, 280),
+            )]
+            
+        elif scenario == "contacting":
+            # CONTACTING: Object very close, gripper open
+            gripper_state = float(np.random.uniform(0.5, 1.0))
+            
+            if left_gripper_pos is not None and np.random.random() < 0.5:
+                gripper_pos = left_gripper_pos.numpy()
+            elif right_gripper_pos is not None:
+                gripper_pos = right_gripper_pos.numpy()
+            else:
+                gripper_pos = np.array([0.0, 0.0, 0.0])
+            
+            offset = np.random.uniform(-0.04, 0.04, size=3)
+            object_pos = tuple(gripper_pos + offset)
+            
+            objects_3d = [Object3D(
+                class_name="contact_mug",
+                confidence=np.random.uniform(0.85, 0.95),
+                position=object_pos,
+                size=(0.06, 0.09),
+                bbox=(310, 210, 370, 290),
+            )]
+            
+        else:
+            # NORMAL: Random object positions, random gripper state
+            gripper_state = float(np.random.uniform(0, 1))
+            
+            # Add 1-2 random objects far from grippers
+            num_objs = np.random.randint(1, 3)
+            objects_3d = []
+            for j in range(num_objs):
+                objects_3d.append(Object3D(
+                    class_name=f"object_{j}",
+                    confidence=np.random.uniform(0.6, 0.95),
+                    position=(
+                        np.random.uniform(-0.5, 0.5),
+                        np.random.uniform(-0.5, 0.5),
+                        np.random.uniform(-0.2, 0.2),
+                    ),
+                    size=(0.05, 0.08),
+                    bbox=(np.random.randint(100, 500), np.random.randint(100, 400),
+                          np.random.randint(150, 550), np.random.randint(150, 450)),
+                ))
+        
+        # Create graph with objects
+        graph = transformer.to_graph_with_objects(state, objects_3d, gripper_state)
         graph = add_predicate_labels(graph, prev_graph)
         dataset.append(graph)
         prev_graph = graph
@@ -224,11 +393,16 @@ def train_epoch(
     profile: GPUProfile,
     device: torch.device,
     scaler: torch.amp.GradScaler | None,
+    criterion: nn.Module | None = None,
 ) -> dict:
     """Train for one epoch."""
     model.train()
     total_loss = 0.0
     num_batches = 0
+    
+    # Default to BCE if no criterion provided
+    if criterion is None:
+        criterion = lambda pred, target: F.binary_cross_entropy_with_logits(pred, target)
     
     optimizer.zero_grad()
     
@@ -241,8 +415,8 @@ def train_epoch(
         with torch.amp.autocast('cuda', enabled=profile.use_amp):
             outputs = model(batch)
             
-            # BCE loss for multi-label predicate classification
-            loss = F.binary_cross_entropy_with_logits(
+            # Use provided criterion (WeightedFocalLoss or BCE)
+            loss = criterion(
                 outputs["predicate_logits"],
                 batch.y,
             )
@@ -344,10 +518,20 @@ def train(
     val_data = dataset[:val_size]
     print(f"Train samples: {len(train_data)}, Val samples: {len(val_data)}")
     
-    # Model
+    # Compute class weights for handling imbalance
+    pos_weight = compute_class_weights(train_data, num_predicates=9)
+    print(f"Class weights: {[f'{w:.1f}' for w in pos_weight.tolist()]}")
+    
+    # Create weighted focal loss criterion
+    criterion = WeightedFocalLoss(alpha=0.25, gamma=2.0, pos_weight=pos_weight)
+    print("Using WeightedFocalLoss (alpha=0.25, gamma=2.0)")
+    
+    # Model with Global Feature Conditioning (GFC) for is_holding
     model = RelationalGNN(
         hidden_dim=profile.hidden_dim,
         num_layers=profile.num_layers,
+        use_global_conditioning=True,
+        global_dim=2,  # [left_gripper, right_gripper]
     ).to(device)
     
     num_params = sum(p.numel() for p in model.parameters())
@@ -385,7 +569,7 @@ def train(
         
         # Train
         train_metrics = train_epoch(
-            model, train_data, optimizer, profile, device, scaler
+            model, train_data, optimizer, profile, device, scaler, criterion
         )
         
         # Validate

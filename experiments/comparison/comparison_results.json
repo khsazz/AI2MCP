@@ -4,67 +4,67 @@
     "total_samples": 200,
     "accuracy": {
       "per_predicate": {
-        "is_near": 0.5108,
-        "is_above": 0.9699,
-        "is_below": 0.9699,
-        "is_left_of": 0.8064,
-        "is_right_of": 0.8085,
-        "is_holding": 1.0,
-        "is_contacting": 0.9974,
-        "is_approaching": 0.76,
-        "is_retracting": 0.8374
+        "is_near": 0.6788,
+        "is_above": 0.9817,
+        "is_below": 0.979,
+        "is_left_of": 0.7882,
+        "is_right_of": 0.7965,
+        "is_holding": 0.9962,
+        "is_contacting": 0.9967,
+        "is_approaching": 0.6487,
+        "is_retracting": 0.6609
       },
       "precision_per_predicate": {
-        "is_near": 0.3835,
-        "is_above": 0,
-        "is_below": 0,
-        "is_left_of": 0.7602,
-        "is_right_of": 0.7626,
-        "is_holding": 0,
-        "is_contacting": 0,
-        "is_approaching": 0,
-        "is_retracting": 0
+        "is_near": 0.6435,
+        "is_above": 0.554,
+        "is_below": 0.5154,
+        "is_left_of": 0.9505,
+        "is_right_of": 0.9447,
+        "is_holding": 0.8603,
+        "is_contacting": 0.9336,
+        "is_approaching": 0.4357,
+        "is_retracting": 0.2901
       },
       "recall_per_predicate": {
-        "is_near": 0.9855,
-        "is_above": 0.0,
-        "is_below": 0.0,
-        "is_left_of": 0.7847,
-        "is_right_of": 0.7874,
-        "is_holding": 0,
-        "is_contacting": 0.0,
-        "is_approaching": 0.0,
-        "is_retracting": 0.0
+        "is_near": 0.4349,
+        "is_above": 0.9112,
+        "is_below": 0.9073,
+        "is_left_of": 0.5144,
+        "is_right_of": 0.5394,
+        "is_holding": 0.975,
+        "is_contacting": 0.9868,
+        "is_approaching": 0.7971,
+        "is_retracting": 0.5698
       },
       "f1_per_predicate": {
-        "is_near": 0.5521,
-        "is_above": 0,
-        "is_below": 0,
-        "is_left_of": 0.7723,
-        "is_right_of": 0.7748,
-        "is_holding": 0,
-        "is_contacting": 0,
-        "is_approaching": 0,
-        "is_retracting": 0
+        "is_near": 0.519,
+        "is_above": 0.6891,
+        "is_below": 0.6573,
+        "is_left_of": 0.6676,
+        "is_right_of": 0.6867,
+        "is_holding": 0.9141,
+        "is_contacting": 0.9595,
+        "is_approaching": 0.5634,
+        "is_retracting": 0.3845
       },
-      "macro_f1": 0.2332,
-      "micro_accuracy": 0.8511
+      "macro_f1": 0.6712,
+      "micro_accuracy": 0.8363
     },
     "latency_ms": {
-      "mean": 2.14,
-      "p50": 2.1,
-      "p95": 2.36,
-      "p99": 2.53
+      "mean": 2.52,
+      "p50": 2.4,
+      "p95": 2.98,
+      "p99": 4.34
     },
     "memory_mb": {
-      "peak": 15.843328,
-      "model_size": 0.813476
+      "peak": 105.601024,
+      "model_size": 0.8145
     },
     "timing_breakdown_ms": {
-      "detection": 0.05,
-      "depth": 5.5,
-      "graph": 0.11,
-      "inference": 2.03
+      "detection": 0.0,
+      "depth": 5.87,
+      "graph": 0.13,
+      "inference": 2.38
     }
   },
   "option_c": {
@@ -72,67 +72,67 @@
     "total_samples": 200,
     "accuracy": {
       "per_predicate": {
-        "is_near": 0.6939,
-        "is_above": 0.0716,
-        "is_below": 0.2641,
-        "is_left_of": 0.464,
-        "is_right_of": 0.5309,
-        "is_holding": 0.2662,
-        "is_contacting": 0.0208,
-        "is_approaching": 0.7529,
-        "is_retracting": 0.8354
+        "is_near": 0.6811,
+        "is_above": 0.9737,
+        "is_below": 0.9746,
+        "is_left_of": 0.7553,
+        "is_right_of": 0.7752,
+        "is_holding": 0.9794,
+        "is_contacting": 0.9614,
+        "is_approaching": 0.6755,
+        "is_retracting": 0.7945
       },
       "precision_per_predicate": {
-        "is_near": 0.0,
-        "is_above": 0.0249,
-        "is_below": 0.0189,
-        "is_left_of": 0.4198,
-        "is_right_of": 0.4387,
-        "is_holding": 0.0,
-        "is_contacting": 0.0025,
-        "is_approaching": 0.2426,
-        "is_retracting": 0.0476
+        "is_near": 0.7703,
+        "is_above": 0.236,
+        "is_below": 0.2239,
+        "is_left_of": 0.8613,
+        "is_right_of": 0.8537,
+        "is_holding": 0,
+        "is_contacting": 0.8889,
+        "is_approaching": 0.4298,
+        "is_retracting": 0.3408
       },
       "recall_per_predicate": {
-        "is_near": 0.0,
-        "is_above": 0.7826,
-        "is_below": 0.4615,
-        "is_left_of": 0.7359,
-        "is_right_of": 0.4339,
-        "is_holding": 0,
-        "is_contacting": 0.9231,
-        "is_approaching": 0.0138,
-        "is_retracting": 0.0006
+        "is_near": 0.2847,
+        "is_above": 0.0811,
+        "is_below": 0.0579,
+        "is_left_of": 0.4864,
+        "is_right_of": 0.5506,
+        "is_holding": 0.0,
+        "is_contacting": 0.0175,
+        "is_approaching": 0.4309,
+        "is_retracting": 0.1132
       },
       "f1_per_predicate": {
-        "is_near": 0,
-        "is_above": 0.0482,
-        "is_below": 0.0363,
-        "is_left_of": 0.5346,
-        "is_right_of": 0.4363,
+        "is_near": 0.4157,
+        "is_above": 0.1207,
+        "is_below": 0.092,
+        "is_left_of": 0.6217,
+        "is_right_of": 0.6694,
         "is_holding": 0,
-        "is_contacting": 0.0049,
-        "is_approaching": 0.0261,
-        "is_retracting": 0.0012
+        "is_contacting": 0.0344,
+        "is_approaching": 0.4303,
+        "is_retracting": 0.17
       },
-      "macro_f1": 0.1209,
-      "micro_accuracy": 0.4333
+      "macro_f1": 0.2838,
+      "micro_accuracy": 0.8412
     },
     "latency_ms": {
-      "mean": 3.38,
-      "p50": 3.33,
-      "p95": 3.74,
-      "p99": 4.08
+      "mean": 3.81,
+      "p50": 3.74,
+      "p95": 4.39,
+      "p99": 4.54
     },
     "memory_mb": {
-      "peak": 22.018048,
+      "peak": 111.758848,
       "model_size": 2.0689
     },
     "timing_breakdown_ms": {
-      "detection": 0.05,
+      "detection": 0.0,
       "depth": 0,
-      "graph": 0.6,
-      "inference": 2.77
+      "graph": 0.64,
+      "inference": 3.17
     }
   },
   "config": {

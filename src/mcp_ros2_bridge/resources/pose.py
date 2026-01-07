@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from mcp.types import Resource, TextContent
+from mcp.types import Resource
 
 if TYPE_CHECKING:
     from mcp_ros2_bridge.ros_node import ROS2Bridge
@@ -38,7 +38,7 @@ def get_pose_resources() -> list[Resource]:
     ]
 
 
-async def handle_pose_resource(uri: str, ros_bridge: ROS2Bridge) -> list[TextContent] | None:
+async def handle_pose_resource(uri: str, ros_bridge: ROS2Bridge) -> str | None:
     """Handle pose-related resource reads. Returns None if URI not handled."""
     state = ros_bridge.state
 
@@ -71,4 +71,4 @@ async def handle_pose_resource(uri: str, ros_bridge: ROS2Bridge) -> list[TextCon
     else:
         return None
 
-    return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    return json.dumps(data, indent=2)

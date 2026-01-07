@@ -18,24 +18,26 @@ from agents.base_agent import BaseAgent, AgentConfig, ToolCall
 logger = structlog.get_logger()
 
 
-SYSTEM_PROMPT = """You are an AI agent controlling a mobile robot through the Model Context Protocol (MCP).
+SYSTEM_PROMPT = """You control a robot via MCP. Output JSON only.
 
-Your capabilities:
-- Move the robot using velocity commands (move, set_velocity, stop)
-- Navigate using high-level commands (move_forward, rotate)
-- Query sensor data (get_obstacle_distances, check_path_clear, scan_surroundings)
+IMPORTANT: After 1-2 tool calls, you MUST complete the task.
+Do NOT keep calling the same tools repeatedly.
 
-Guidelines:
-1. Always check for obstacles before moving
-2. Use scan_surroundings to understand the environment
-3. Move carefully with small movements
-4. Stop immediately if collision risk detected
+## Response Format
+Complete task: {"action": "complete", "reason": "Found X predicates"}
+Call tool: {"action": "tool_call", "tool": "name", "arguments": {}}
 
-You must respond with valid JSON only. Format:
-- Task complete: {"action": "complete", "reason": "explanation"}
-- Tool call: {"action": "tool_call", "tool": "tool_name", "arguments": {"arg1": value}}
+## Available Tools
+- get_world_graph(threshold) - Get scene graph
+- get_predicates(threshold) - Get active predicates  
+- move(linear_x, angular_z, duration_ms) - Move robot
+- stop() - Emergency stop
 
-Do not include any text outside the JSON response."""
+## Predicates (detected by GNN)
+Spatial: is_near, is_left_of, is_right_of
+Interaction: is_holding, is_contacting
+
+JSON only. Complete after gathering info."""
 
 
 class LlamaAgent(BaseAgent):
@@ -81,20 +83,72 @@ class LlamaAgent(BaseAgent):
             f"- {t['name']}: {t.get('description', '')}"
             for t in available_tools
         )
+        
+        # Build history section
+        history_section = ""
+        if self.state.message_history:
+            history_lines = []
+            for turn in self.state.message_history[-3:]:  # Last 3 turns for Llama (shorter context)
+                action = turn.get('action', {})
+                if action:
+                    history_lines.append(f"Step {turn.get('step')}: {action.get('tool', '?')}({action.get('arguments', {})})")
+            if history_lines:
+                history_section = "Recent actions:\n" + "\n".join(history_lines) + "\n\n"
+
+        # Check if we have predicate data (goal achieved indicator)
+        predicates = observation.get("predicates", {})
+        spatial_count = predicates.get("spatial_count", 0)
+        interaction_count = predicates.get("interaction_count", 0)
+        
+        # Last action result
+        last_result = ""
+        if self.state.last_action:
+            tool_name = self.state.last_action.get("tool", "unknown")
+            result = self.state.last_action.get("result", {})
+            if result:
+                # Summarize result
+                if isinstance(result, dict):
+                    if "world_context" in result:
+                        ctx = result["world_context"]
+                        last_result = f"Last result: {tool_name} returned {ctx.get('num_nodes', '?')} nodes, {ctx.get('num_edges', '?')} edges"
+                    elif "predicates" in result:
+                        last_result = f"Last result: {tool_name} returned {len(result['predicates'])} predicates"
+                    else:
+                        last_result = f"Last result: {tool_name} succeeded"
+                else:
+                    last_result = f"Last result: {tool_name} returned data"
 
         return f"""Goal: {self.state.goal}
 
-Step: {self.state.step_count}
+Step: {self.state.step_count}/{self.config.max_steps}
+{last_result}
 
-Available tools:
-{tools_desc}
+{history_section}Current observation:
+- Spatial predicates detected: {spatial_count}
+- Interaction predicates detected: {interaction_count}
+- World graph: {observation.get("world_graph", {}).get("num_nodes", "?")} nodes
 
-Current observation:
-{json.dumps(observation, indent=2)}
+DECISION RULE:
+- If spatial_count > 0: Task done! Return complete.
+- If step > 2: Stop and report what you found.
+- Otherwise: Call get_world_graph once.
 
-{f"Last action: {json.dumps(self.state.last_action)}" if self.state.last_action else ""}
+Example complete response:
+{{"action": "complete", "reason": "Found {spatial_count} spatial predicates"}}
 
-Analyze the situation and respond with a JSON action."""
+JSON only:"""
+    
+    def _add_to_history(self, observation: dict, action: dict | None, result: Any) -> None:
+        """Add a turn to conversation history."""
+        self.state.message_history.append({
+            "step": self.state.step_count,
+            "action": action,
+            "result_success": result.success if hasattr(result, 'success') else True,
+        })
+        
+        # Trim to max history
+        if len(self.state.message_history) > 6:
+            self.state.message_history = self.state.message_history[-3:]
 
     async def decide_action(
         self,

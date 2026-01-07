@@ -10,7 +10,7 @@ import json
 import math
 from typing import TYPE_CHECKING, Any
 
-from mcp.types import Resource, TextContent
+from mcp.types import Resource
 
 if TYPE_CHECKING:
     from mcp_ros2_bridge.ros_node import ROS2Bridge
@@ -43,7 +43,7 @@ def get_world_graph_resources() -> list[Resource]:
     ]
 
 
-async def handle_world_graph_resource(uri: str, ros_bridge: ROS2Bridge) -> list[TextContent] | None:
+async def handle_world_graph_resource(uri: str, ros_bridge: ROS2Bridge) -> str | None:
     """Handle world graph resource reads. Returns None if URI not handled."""
     state = ros_bridge.state
 
@@ -58,7 +58,7 @@ async def handle_world_graph_resource(uri: str, ros_bridge: ROS2Bridge) -> list[
     else:
         return None
 
-    return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    return json.dumps(data, indent=2)
 
 
 def _build_world_graph(state: Any, is_connected: bool) -> dict:

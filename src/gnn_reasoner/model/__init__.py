@@ -10,6 +10,7 @@ from gnn_reasoner.model.relational_gnn import (
     NodeEncoder,
     EdgeEncoder,
     PredicateHead,
+    ConditionalPredicateHead,
 )
 from gnn_reasoner.model.multimodal_gnn import (
     MultiModalGNN,
@@ -31,6 +32,7 @@ __all__ = [
     "NodeEncoder",
     "EdgeEncoder",
     "PredicateHead",
+    "ConditionalPredicateHead",
     # Multi-Modal GNN (Option C)
     "MultiModalGNN",
     "VisionEncoder",

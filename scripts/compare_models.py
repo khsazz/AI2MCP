@@ -369,8 +369,20 @@ def create_evaluation_data(
     synthetic: bool = True,
     repo_id: str = "lerobot/aloha_static_coffee",
     num_frames: int = 500,
+    holding_ratio: float = 0.30,  # 30% holding frames for evaluation (matches training)
+    contacting_ratio: float = 0.10,  # 10% contacting frames
 ) -> list[dict]:
-    """Create evaluation data."""
+    """Create evaluation data with realistic interaction scenarios.
+    
+    Args:
+        synthetic: Use synthetic data if True, else load from LeRobot
+        repo_id: LeRobot dataset ID (if not synthetic)
+        num_frames: Number of evaluation samples
+        holding_ratio: Fraction of holding scenarios
+        contacting_ratio: Fraction of contacting scenarios
+    """
+    from gnn_reasoner.camera import Object3D
+    
     transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
     detector = MockVisionDetector()
     depth_estimator = MockDepthEstimator()
@@ -378,23 +390,89 @@ def create_evaluation_data(
 
     data_list = []
     prev_graph = None
+    
+    # Calculate scenario counts
+    num_holding = int(num_frames * holding_ratio)
+    num_contacting = int(num_frames * contacting_ratio)
 
     if synthetic:
         logger.info(f"Creating {num_frames} synthetic samples...")
-        for _ in tqdm(range(num_frames), desc="Generating data"):
-            state = torch.randn(14)
+        logger.info(f"  Holding: {num_holding}, Contacting: {num_contacting}")
+        
+        for i in tqdm(range(num_frames), desc="Generating data"):
+            # Determine scenario type (same distribution as training)
+            if i < num_holding:
+                scenario = "holding"
+            elif i < num_holding + num_contacting:
+                scenario = "contacting"
+            else:
+                scenario = "normal"
+            
+            state = torch.randn(14) * 0.5
             image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
 
             t0 = time.perf_counter()
-            detections = detector.detect(image, prompts=["cup", "mug", "bottle"])
             detection_time = (time.perf_counter() - t0) * 1000
 
             t0 = time.perf_counter()
             depth_map = depth_estimator.estimate(image)
             depth_time = (time.perf_counter() - t0) * 1000
+            
+            # Build base graph to get gripper positions
+            base_graph = transformer.to_graph(state)
+            left_gripper_pos, right_gripper_pos = transformer.get_gripper_positions(base_graph)
+            
+            if scenario == "holding":
+                # Object at gripper, gripper closed
+                gripper_state = np.random.uniform(0.0, 0.25)
+                if left_gripper_pos is not None and np.random.random() < 0.5:
+                    gripper_pos = left_gripper_pos.numpy()
+                elif right_gripper_pos is not None:
+                    gripper_pos = right_gripper_pos.numpy()
+                else:
+                    gripper_pos = np.array([0.0, 0.0, 0.0])
+                
+                offset = np.random.uniform(-0.03, 0.03, size=3)
+                object_pos = tuple(gripper_pos + offset)
+                
+                objects_3d = [Object3D(
+                    class_name="held_cup",
+                    confidence=np.random.uniform(0.9, 0.99),
+                    position=object_pos,
+                    size=(0.05, 0.08),
+                    bbox=(300, 200, 360, 280),
+                )]
+                bboxes = [objects_3d[0].bbox]
+                
+            elif scenario == "contacting":
+                # Object close, gripper open
+                gripper_state = np.random.uniform(0.5, 1.0)
+                if left_gripper_pos is not None and np.random.random() < 0.5:
+                    gripper_pos = left_gripper_pos.numpy()
+                elif right_gripper_pos is not None:
+                    gripper_pos = right_gripper_pos.numpy()
+                else:
+                    gripper_pos = np.array([0.0, 0.0, 0.0])
+                
+                offset = np.random.uniform(-0.04, 0.04, size=3)
+                object_pos = tuple(gripper_pos + offset)
+                
+                objects_3d = [Object3D(
+                    class_name="contact_mug",
+                    confidence=np.random.uniform(0.85, 0.95),
+                    position=object_pos,
+                    size=(0.06, 0.09),
+                    bbox=(310, 210, 370, 290),
+                )]
+                bboxes = [objects_3d[0].bbox]
+                
+            else:
+                # Normal: random objects
+                gripper_state = np.random.uniform(0, 1)
+                detections = detector.detect(image, prompts=["cup", "mug", "bottle"])
+                objects_3d = detections_to_objects_3d(detections, depth_map, intrinsics)
+                bboxes = [det.bbox for det in detections]
 
-            objects_3d = detections_to_objects_3d(detections, depth_map, intrinsics)
-            gripper_state = np.random.uniform(0, 1)
             graph = transformer.to_graph_with_objects(state, objects_3d, gripper_state)
             graph = add_predicate_labels(graph, prev_graph)
 
@@ -403,7 +481,7 @@ def create_evaluation_data(
             data_list.append({
                 "graph": graph,
                 "image": image_tensor,
-                "bboxes": [det.bbox for det in detections],
+                "bboxes": bboxes,
                 "detection_time": detection_time,
                 "depth_time": depth_time,
             })
@@ -520,7 +598,13 @@ def main():
 
     # Load models
     logger.info("Loading RelationalGNN (Option A)...")
-    model_a = RelationalGNN(hidden_dim=128, num_predicates=9)
+    # Use global conditioning (GFC) for interaction predicates like is_holding
+    model_a = RelationalGNN(
+        hidden_dim=128, 
+        num_predicates=9,
+        use_global_conditioning=True,
+        global_dim=2,
+    )
     if args.model_a and Path(args.model_a).exists():
         checkpoint = torch.load(args.model_a, map_location=device, weights_only=False)
         model_a.load_state_dict(checkpoint["model_state_dict"])

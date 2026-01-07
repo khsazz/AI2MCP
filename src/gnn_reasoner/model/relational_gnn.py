@@ -163,6 +163,79 @@ class PredicateHead(nn.Module):
         return self.pairwise_predictor(pair_embed)
 
 
+class ConditionalPredicateHead(nn.Module):
+    """Predicate head with global context conditioning (Strategy B: GFC).
+    
+    Unlike PredicateHead which only uses node embeddings, this head
+    explicitly conditions on global context u (e.g., gripper states).
+    This is essential for learning interaction predicates like is_holding
+    which require both spatial proximity AND gripper state information.
+    
+    The key insight is that is_holding cannot be learned from graph
+    structure alone - it requires knowing whether the gripper is closed.
+    
+    Reference: Global Feature Conditioning (GFC) pattern for GNNs.
+    """
+
+    def __init__(
+        self,
+        hidden_dim: int = 64,
+        global_dim: int = 2,  # [left_gripper, right_gripper]
+        num_predicates: int = len(ALL_PREDICATES),
+    ):
+        super().__init__()
+        self.num_predicates = num_predicates
+        self.global_dim = global_dim
+
+        # Input: source node + target node + global context
+        input_dim = hidden_dim * 2 + global_dim
+        
+        self.pairwise_predictor = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, num_predicates),
+        )
+
+    def forward(
+        self,
+        node_embeddings: Tensor,
+        edge_index: Tensor,
+        u: Tensor,
+        batch: Tensor | None = None,
+    ) -> Tensor:
+        """Predict predicates conditioned on global context.
+
+        Args:
+            node_embeddings: (num_nodes, hidden_dim)
+            edge_index: (2, num_edges)
+            u: Global context (batch_size, global_dim) or (1, global_dim)
+            batch: Node-to-graph mapping (num_nodes,) for batched graphs
+
+        Returns:
+            Predicate logits (num_edges, num_predicates)
+        """
+        src_idx, tgt_idx = edge_index[0], edge_index[1]
+        src_embed = node_embeddings[src_idx]
+        tgt_embed = node_embeddings[tgt_idx]
+        
+        # Expand global context to each edge
+        if batch is not None:
+            # Batched: map each edge to its graph's global context
+            edge_batch = batch[src_idx]  # (num_edges,)
+            u_expanded = u[edge_batch]   # (num_edges, global_dim)
+        else:
+            # Single graph: broadcast u to all edges
+            num_edges = edge_index.shape[1]
+            u_expanded = u.expand(num_edges, -1)  # (num_edges, global_dim)
+        
+        # Concatenate: [src_embed, tgt_embed, global_context]
+        # This is the "surgical fix" - explicit conditioning on gripper state
+        cat_features = torch.cat([src_embed, tgt_embed, u_expanded], dim=-1)
+        
+        return self.pairwise_predictor(cat_features)
+
+
 class RelationalGNN(nn.Module):
     """Relational Graph Neural Network for predicate prediction.
 
@@ -183,6 +256,8 @@ class RelationalGNN(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.1,
         num_predicates: int = len(ALL_PREDICATES),
+        use_global_conditioning: bool = True,
+        global_dim: int = 2,  # [left_gripper, right_gripper]
     ):
         """Initialize RelationalGNN.
 
@@ -194,6 +269,9 @@ class RelationalGNN(nn.Module):
             num_heads: Number of attention heads
             dropout: Dropout probability
             num_predicates: Number of predicates to predict
+            use_global_conditioning: If True, use ConditionalPredicateHead with
+                global context u (gripper states). Essential for is_holding.
+            global_dim: Dimension of global context vector u
         """
         super().__init__()
 
@@ -203,6 +281,8 @@ class RelationalGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.num_predicates = num_predicates
+        self.use_global_conditioning = use_global_conditioning
+        self.global_dim = global_dim
 
         # Encoders
         self.node_encoder = NodeEncoder(node_input_dim, hidden_dim)
@@ -226,7 +306,13 @@ class RelationalGNN(nn.Module):
             self.norms.append(nn.LayerNorm(hidden_dim))
 
         # Predicate prediction head
-        self.predicate_head = PredicateHead(hidden_dim, num_predicates)
+        # Use conditional head for interaction predicates (is_holding requires gripper state)
+        if use_global_conditioning:
+            self.predicate_head = ConditionalPredicateHead(
+                hidden_dim, global_dim, num_predicates
+            )
+        else:
+            self.predicate_head = PredicateHead(hidden_dim, num_predicates)
 
         # Graph-level output (for action prediction)
         self.graph_head = nn.Sequential(
@@ -248,6 +334,8 @@ class RelationalGNN(nn.Module):
                 - edge_attr: Edge features (num_edges, edge_input_dim)
                 - node_types: Optional node type indices (num_nodes,)
                 - batch: Optional batch indices (num_nodes,)
+                - u: Optional global context (batch_size, global_dim) for
+                     conditioning predicate predictions on gripper state
 
         Returns:
             Dictionary with:
@@ -282,7 +370,18 @@ class RelationalGNN(nn.Module):
             x = self.dropout(x)
 
         # Predicate prediction on edges
-        predicate_logits = self.predicate_head(x, edge_index)
+        if self.use_global_conditioning:
+            # Get global context u (gripper states)
+            if hasattr(data, "u") and data.u is not None:
+                u = data.u.to(x.device)
+            else:
+                # Fallback: assume grippers half-open if u not provided
+                batch_size = batch.max().item() + 1 if batch is not None and batch.numel() > 0 else 1
+                u = torch.full((batch_size, self.global_dim), 0.5, device=x.device)
+            
+            predicate_logits = self.predicate_head(x, edge_index, u, batch)
+        else:
+            predicate_logits = self.predicate_head(x, edge_index)
 
         # Graph-level embedding (concat mean + max pooling)
         mean_pool = global_mean_pool(x, batch)

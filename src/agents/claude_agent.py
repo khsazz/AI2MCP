@@ -23,24 +23,50 @@ from agents.base_agent import BaseAgent, AgentConfig, ToolCall
 logger = structlog.get_logger()
 
 
-SYSTEM_PROMPT = """You are an AI agent controlling a mobile robot through the Model Context Protocol (MCP).
+SYSTEM_PROMPT = """You are an AI agent controlling a robot through the Model Context Protocol (MCP).
 
-Your capabilities:
-- Move the robot using velocity commands (move, set_velocity, stop)
-- Navigate using high-level commands (move_forward, rotate)
-- Query sensor data (get_obstacle_distances, check_path_clear, scan_surroundings)
-- Access robot state through resources (pose, velocity, scan data, world graph)
+## Your Capabilities
 
-Guidelines:
-1. Always check for obstacles before moving
-2. Use scan_surroundings to understand the environment
-3. Move carefully - prefer small movements and checking often
-4. Stop immediately if you detect a potential collision
-5. Explain your reasoning briefly before each action
+### Motion Tools
+- `move(linear_x, angular_z, duration_ms)` - Move with velocity for duration
+- `stop()` - Emergency stop
+- `rotate(angle_degrees)` - Rotate in place
+- `move_forward(distance_meters)` - Move forward by distance
 
-Current observations and world state will be provided. Analyze them to decide your next action.
-If the goal is achieved, respond with {"action": "complete", "reason": "..."}.
-Otherwise, respond with {"action": "tool_call", "tool": "tool_name", "arguments": {...}}.
+### Perception Tools
+- `get_obstacle_distances(directions)` - Query obstacle distances
+- `check_path_clear(distance, width)` - Check if path is navigable
+- `scan_surroundings(num_sectors)` - 360° obstacle scan
+
+### Prediction Tools (GNN-based reasoning)
+- `get_world_graph(threshold)` - Get semantic graph with spatial/interaction predicates
+- `get_predicates(threshold)` - Get active predicates (is_near, is_holding, etc.)
+- `advance_frame()` - Move to next frame in trajectory
+- `set_frame(frame_idx)` - Jump to specific frame
+- `predict_action_outcome(action, num_steps)` - Predict future state changes
+
+### Resources (via observations)
+- `robot://pose` - Current position (x, y, θ)
+- `robot://lerobot/world_graph` - GNN-processed relational graph with predicates
+- `robot://lerobot/predicates` - Active predicates with confidence scores
+
+## Reasoning Guidelines
+
+1. **Think step-by-step**: Before acting, analyze the current state and predicates
+2. **Use predicates**: The GNN provides semantic understanding:
+   - Spatial: `is_near`, `is_above`, `is_below`, `is_left_of`, `is_right_of`
+   - Interaction: `is_holding`, `is_contacting`, `is_approaching`, `is_retracting`
+3. **Check before moving**: Query obstacles or predicates before motion
+4. **Small incremental actions**: Prefer small movements and frequent observation
+5. **Stop on risk**: Immediately stop if collision risk detected
+
+## Response Format
+
+Respond with valid JSON only:
+- Task complete: `{"action": "complete", "reason": "explanation"}`
+- Tool call: `{"action": "tool_call", "tool": "tool_name", "arguments": {...}, "reasoning": "brief explanation"}`
+
+Always include a "reasoning" field explaining your decision.
 """
 
 
@@ -96,28 +122,64 @@ class ClaudeAgent(BaseAgent):
         """Build prompt for Claude with current context."""
         prompt_parts = [
             f"## Current Goal\n{self.state.goal}\n",
-            f"## Step {self.state.step_count}\n",
-            "## Current Observation\n```json\n" + json.dumps(observation, indent=2) + "\n```\n",
+            f"## Step {self.state.step_count} of {self.config.max_steps}\n",
         ]
+        
+        # Include conversation history for context
+        if self.state.message_history:
+            prompt_parts.append("## Recent History")
+            for turn in self.state.message_history[-self.state.max_history_turns:]:
+                prompt_parts.append(f"\n### Step {turn.get('step', '?')}")
+                if turn.get('action'):
+                    prompt_parts.append(f"Action: `{turn['action'].get('tool', 'unknown')}({turn['action'].get('arguments', {})})`")
+                if turn.get('result'):
+                    result_summary = str(turn['result'])[:200]
+                    prompt_parts.append(f"Result: {result_summary}...")
+            prompt_parts.append("")
+        
+        # Current observation
+        prompt_parts.append("## Current Observation\n```json\n" + json.dumps(observation, indent=2) + "\n```\n")
 
-        if self.state.last_action:
-            prompt_parts.append(
-                "## Last Action\n```json\n" + json.dumps(self.state.last_action, indent=2) + "\n```\n"
-            )
+        # Available tools (grouped by category)
+        prompt_parts.append("## Available Tools")
+        motion_tools = [t for t in available_tools if t['name'] in ('move', 'stop', 'rotate', 'move_forward', 'set_velocity')]
+        perception_tools = [t for t in available_tools if t['name'] in ('get_obstacle_distances', 'check_path_clear', 'scan_surroundings')]
+        prediction_tools = [t for t in available_tools if t['name'] in ('get_world_graph', 'get_predicates', 'advance_frame', 'set_frame', 'predict_action_outcome')]
+        
+        if motion_tools:
+            prompt_parts.append("**Motion:**")
+            prompt_parts.extend(f"- `{t['name']}`: {t.get('description', '')}" for t in motion_tools)
+        if perception_tools:
+            prompt_parts.append("**Perception:**")
+            prompt_parts.extend(f"- `{t['name']}`: {t.get('description', '')}" for t in perception_tools)
+        if prediction_tools:
+            prompt_parts.append("**Prediction (GNN):**")
+            prompt_parts.extend(f"- `{t['name']}`: {t.get('description', '')}" for t in prediction_tools)
 
         prompt_parts.append(
-            "## Available Tools\n" + 
-            "\n".join(f"- {t['name']}: {t.get('description', '')}" for t in available_tools)
-        )
-
-        prompt_parts.append(
-            "\n\nBased on the observation and your goal, decide your next action. "
-            "Respond with a JSON object containing either:\n"
-            '- {"action": "complete", "reason": "..."} if the goal is achieved\n'
-            '- {"action": "tool_call", "tool": "tool_name", "arguments": {...}} for the next action'
+            "\n## Your Response\n"
+            "Analyze the situation step-by-step, then respond with JSON:\n"
+            '- `{"action": "complete", "reason": "..."}` if goal achieved\n'
+            '- `{"action": "tool_call", "tool": "name", "arguments": {...}, "reasoning": "..."}` for next action'
         )
 
         return "\n".join(prompt_parts)
+    
+    def _add_to_history(self, observation: dict, action: dict | None, result: Any) -> None:
+        """Add a turn to conversation history."""
+        self.state.message_history.append({
+            "step": self.state.step_count,
+            "observation_summary": {
+                "pose": observation.get("pose", {}),
+                "predicates_count": len(observation.get("predicates", [])),
+            },
+            "action": action,
+            "result": result,
+        })
+        
+        # Trim to max history
+        if len(self.state.message_history) > self.state.max_history_turns * 2:
+            self.state.message_history = self.state.message_history[-self.state.max_history_turns:]
 
     async def decide_action(
         self,

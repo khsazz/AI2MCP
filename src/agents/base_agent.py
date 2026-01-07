@@ -40,6 +40,10 @@ class AgentState:
     goal: str = ""
     is_complete: bool = False
     error: str | None = None
+    
+    # Conversation history for context
+    message_history: list = field(default_factory=list)
+    max_history_turns: int = 5  # Keep last N observation-action pairs
 
 
 @dataclass
@@ -60,7 +64,10 @@ class ToolResult:
 
 
 class MCPClient:
-    """Client for communicating with MCP server over SSE."""
+    """Client for communicating with MCP server over SSE.
+    
+    Uses the official MCP SDK for proper protocol communication.
+    """
 
     def __init__(self, server_url: str, timeout: float = 30.0):
         """Initialize MCP client.
@@ -71,85 +78,256 @@ class MCPClient:
         """
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
-        self.client = httpx.AsyncClient(timeout=timeout)
-        self._session_id: str | None = None
+        self.http_client = httpx.AsyncClient(timeout=timeout)
+        self._session: Any = None
+        self._read_stream: Any = None
+        self._write_stream: Any = None
+        self._context_manager: Any = None
+        self._session_context: Any = None
+        self._tools_cache: list[dict] = []
+        self._resources_cache: list[dict] = []
 
     async def connect(self) -> bool:
-        """Establish connection to MCP server."""
+        """Establish connection to MCP server using SSE."""
         try:
-            response = await self.client.get(f"{self.server_url}/health")
-            if response.status_code == 200:
-                logger.info("Connected to MCP server", url=self.server_url)
+            # First check health endpoint
+            response = await self.http_client.get(f"{self.server_url}/health")
+            if response.status_code != 200:
+                logger.error("MCP server health check failed", status=response.status_code)
+                return False
+            
+            # Connect via MCP SDK
+            try:
+                from mcp import ClientSession
+                from mcp.client.sse import sse_client
+                
+                sse_url = f"{self.server_url}/sse"
+                self._context_manager = sse_client(sse_url)
+                streams = await self._context_manager.__aenter__()
+                self._read_stream, self._write_stream = streams
+                
+                self._session = ClientSession(self._read_stream, self._write_stream)
+                self._session_context = await self._session.__aenter__()
+                await self._session.initialize()
+                
+                logger.info("Connected to MCP server via SSE", url=self.server_url)
+                
+                # Pre-cache tools and resources
+                await self._cache_tools_and_resources()
+                
                 return True
-            return False
+                
+            except ImportError:
+                logger.warning("MCP SDK not available, using HTTP fallback")
+                logger.info("Connected to MCP server (HTTP mode)", url=self.server_url)
+                return True
+                
         except Exception as e:
             logger.error("Failed to connect to MCP server", error=str(e))
             return False
 
+    async def _cache_tools_and_resources(self) -> None:
+        """Cache tools and resources from the server."""
+        if self._session is None:
+            return
+            
+        try:
+            # Get tools
+            tools_result = await self._session.list_tools()
+            self._tools_cache = [
+                {
+                    "name": t.name,
+                    "description": t.description or "",
+                    "inputSchema": t.inputSchema if hasattr(t, 'inputSchema') else {"type": "object", "properties": {}},
+                }
+                for t in tools_result.tools
+            ]
+            logger.info("Cached MCP tools", count=len(self._tools_cache))
+            
+            # Get resources
+            resources_result = await self._session.list_resources()
+            self._resources_cache = [
+                {
+                    "uri": str(r.uri),
+                    "name": r.name if hasattr(r, 'name') else str(r.uri).split("/")[-1],
+                    "description": r.description if hasattr(r, 'description') else "",
+                }
+                for r in resources_result.resources
+            ]
+            logger.info("Cached MCP resources", count=len(self._resources_cache))
+            
+        except Exception as e:
+            logger.warning("Failed to cache tools/resources", error=str(e))
+
     async def list_tools(self) -> list[dict]:
         """List available tools from MCP server."""
-        # In full implementation, this would use MCP protocol
-        # For now, return mock tool list
+        if self._tools_cache:
+            return self._tools_cache
+            
+        # Fallback for HTTP-only mode
         return [
-            {"name": "move", "description": "Move robot with velocity"},
-            {"name": "stop", "description": "Emergency stop"},
-            {"name": "rotate", "description": "Rotate by angle"},
-            {"name": "move_forward", "description": "Move forward by distance"},
-            {"name": "get_obstacle_distances", "description": "Get distances to obstacles"},
-            {"name": "check_path_clear", "description": "Check if path is clear"},
-            {"name": "scan_surroundings", "description": "360-degree obstacle scan"},
+            {"name": "move", "description": "Move robot with velocity", "inputSchema": {"type": "object", "properties": {"linear_x": {"type": "number"}, "angular_z": {"type": "number"}, "duration_ms": {"type": "integer"}}}},
+            {"name": "stop", "description": "Emergency stop", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "rotate", "description": "Rotate by angle", "inputSchema": {"type": "object", "properties": {"angle_degrees": {"type": "number"}}}},
+            {"name": "move_forward", "description": "Move forward by distance", "inputSchema": {"type": "object", "properties": {"distance_meters": {"type": "number"}}}},
+            {"name": "get_obstacle_distances", "description": "Get distances to obstacles", "inputSchema": {"type": "object", "properties": {"directions": {"type": "array", "items": {"type": "string"}}}}},
+            {"name": "check_path_clear", "description": "Check if path is clear", "inputSchema": {"type": "object", "properties": {"distance_meters": {"type": "number"}, "width_meters": {"type": "number"}}}},
+            {"name": "scan_surroundings", "description": "360-degree obstacle scan", "inputSchema": {"type": "object", "properties": {"num_sectors": {"type": "integer"}}}},
+            {"name": "get_world_graph", "description": "Get GNN world graph with predicates", "inputSchema": {"type": "object", "properties": {"threshold": {"type": "number", "default": 0.5}}}},
+            {"name": "get_predicates", "description": "Get active spatial/interaction predicates", "inputSchema": {"type": "object", "properties": {"threshold": {"type": "number", "default": 0.5}}}},
+            {"name": "advance_frame", "description": "Advance to next frame in trajectory", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "set_frame", "description": "Set current frame index", "inputSchema": {"type": "object", "properties": {"frame_idx": {"type": "integer"}}}},
         ]
 
     async def list_resources(self) -> list[dict]:
         """List available resources from MCP server."""
+        if self._resources_cache:
+            return self._resources_cache
+            
+        # Fallback for HTTP-only mode
         return [
             {"uri": "robot://pose", "description": "Robot position and orientation"},
             {"uri": "robot://velocity", "description": "Robot velocity"},
             {"uri": "robot://scan/summary", "description": "LiDAR scan summary"},
             {"uri": "robot://world_graph", "description": "Semantic world graph"},
+            {"uri": "robot://lerobot/current_state", "description": "Current LeRobot observation state"},
+            {"uri": "robot://lerobot/world_graph", "description": "GNN-processed world graph with predicates"},
+            {"uri": "robot://lerobot/predicates", "description": "Active spatial and interaction predicates"},
         ]
 
     async def read_resource(self, uri: str) -> dict:
         """Read a resource from MCP server."""
+        import json
         try:
-            # This would use MCP protocol in full implementation
-            response = await self.client.get(
-                f"{self.server_url}/resource",
-                params={"uri": uri},
-            )
-            if response.status_code == 200:
-                return response.json()
-            return {"error": f"Failed to read resource: {response.status_code}"}
+            if self._session is not None:
+                # Use MCP SDK
+                result = await self._session.read_resource(uri)
+                
+                # Handle different result formats
+                contents = None
+                if hasattr(result, 'contents'):
+                    contents = result.contents
+                elif hasattr(result, 'content'):
+                    contents = [result.content] if not isinstance(result.content, list) else result.content
+                elif isinstance(result, list):
+                    contents = result
+                else:
+                    return {"error": f"Unknown result type: {type(result).__name__}"}
+                
+                if not contents:
+                    return {"error": "Empty resource response"}
+                
+                for content in contents:
+                    text = None
+                    
+                    # Try multiple ways to get the text content
+                    try:
+                        # TextContent has .text attribute
+                        if hasattr(content, 'text') and content.text is not None:
+                            text = content.text
+                        # BlobContent has .data
+                        elif hasattr(content, 'data') and content.data is not None:
+                            text = content.data if isinstance(content.data, str) else str(content.data)
+                        # Direct string
+                        elif isinstance(content, str):
+                            text = content
+                        # Last resort: repr
+                        elif content is not None:
+                            # Check for common JSON-like dict
+                            if hasattr(content, '__dict__'):
+                                text = json.dumps({k: v for k, v in content.__dict__.items() if not k.startswith('_')})
+                    except Exception as inner_e:
+                        logger.debug(f"Error extracting content: {inner_e}")
+                        continue
+                    
+                    if text:
+                        try:
+                            return json.loads(text)
+                        except json.JSONDecodeError:
+                            return {"raw": text[:500]}
+                            
+                return {"error": "No parseable content"}
+            else:
+                # HTTP fallback
+                response = await self.http_client.get(
+                    f"{self.server_url}/resource",
+                    params={"uri": uri},
+                )
+                if response.status_code == 200:
+                    return response.json()
+                return {"error": f"Failed to read resource: {response.status_code}"}
         except Exception as e:
             return {"error": str(e)}
 
+    def _coerce_argument_types(self, arguments: dict) -> dict:
+        """Convert string numbers to actual numbers for MCP tools."""
+        result = {}
+        for key, value in arguments.items():
+            if isinstance(value, str):
+                # Try to convert to number
+                try:
+                    if '.' in value:
+                        result[key] = float(value)
+                    else:
+                        result[key] = int(value)
+                except ValueError:
+                    result[key] = value
+            else:
+                result[key] = value
+        return result
+
     async def call_tool(self, name: str, arguments: dict) -> ToolResult:
         """Call a tool on the MCP server."""
+        # Coerce argument types (LLMs often send "0" instead of 0)
+        arguments = self._coerce_argument_types(arguments)
+        
         try:
-            response = await self.client.post(
-                f"{self.server_url}/messages/",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/call",
-                    "params": {
-                        "name": name,
-                        "arguments": arguments,
-                    },
-                    "id": 1,
-                },
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
+            if self._session is not None:
+                # Use MCP SDK
+                result = await self._session.call_tool(name, arguments)
+                
+                # Extract content from result
+                content_data = {}
+                for content in result.content:
+                    text = getattr(content, 'text', None)
+                    if text:
+                        try:
+                            import json
+                            content_data = json.loads(text)
+                        except json.JSONDecodeError:
+                            content_data = {"text": text}
+                        break
+                
                 return ToolResult(
                     success=True,
-                    content=result.get("result", {}),
+                    content=content_data,
                 )
-            return ToolResult(
-                success=False,
-                content=None,
-                error=f"HTTP {response.status_code}",
-            )
+            else:
+                # HTTP fallback
+                response = await self.http_client.post(
+                    f"{self.server_url}/messages/",
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "tools/call",
+                        "params": {
+                            "name": name,
+                            "arguments": arguments,
+                        },
+                        "id": 1,
+                    },
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return ToolResult(
+                        success=True,
+                        content=result.get("result", {}),
+                    )
+                return ToolResult(
+                    success=False,
+                    content=None,
+                    error=f"HTTP {response.status_code}",
+                )
         except Exception as e:
             return ToolResult(
                 success=False,
@@ -159,7 +337,15 @@ class MCPClient:
 
     async def close(self) -> None:
         """Close the client connection."""
-        await self.client.aclose()
+        try:
+            if self._session is not None:
+                await self._session.__aexit__(None, None, None)
+            if self._context_manager is not None:
+                await self._context_manager.__aexit__(None, None, None)
+        except Exception as e:
+            logger.warning("Error closing MCP session", error=str(e))
+        
+        await self.http_client.aclose()
 
 
 class BaseAgent(ABC):
@@ -203,15 +389,31 @@ class BaseAgent(ABC):
         ...
 
     async def observe(self) -> dict:
-        """Gather current observation from robot."""
+        """Gather current observation from robot.
+        
+        Note: MCP resources have a library bug, so we use tool calls instead.
+        The last_action result contains GNN data from tools like get_world_graph.
+        """
         observation = {}
 
-        # Read key resources
-        resources = ["robot://pose", "robot://scan/summary", "robot://world_graph"]
-        for uri in resources:
-            data = await self.mcp_client.read_resource(uri)
-            key = uri.split("/")[-1]
-            observation[key] = data
+        # Use last action result if available (tools work, resources don't)
+        if self.state.last_action and self.state.last_action.get("result"):
+            result = self.state.last_action["result"]
+            if isinstance(result, dict):
+                # Extract world context from tool result
+                if "world_context" in result:
+                    ctx = result["world_context"]
+                    observation["world_graph"] = {
+                        "num_nodes": ctx.get("num_nodes", 0),
+                        "num_edges": ctx.get("num_edges", 0),
+                    }
+                    # Extract predicates
+                    spatial = result.get("spatial_predicates", [])
+                    interaction = result.get("interaction_predicates", [])
+                    observation["predicates"] = {
+                        "spatial_count": len(spatial),
+                        "interaction_count": len(interaction),
+                    }
 
         self.state.last_observation = observation
         return observation

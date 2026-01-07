@@ -2,6 +2,13 @@
 
 Resources represent readable state that the AI can query to understand
 the robot's current situation and environment.
+
+IMPORTANT: The @server.read_resource() decorator expects:
+    Return type: list[TextResourceContents]
+    
+The previous bug was returning plain `str` which caused:
+    TypeError: 'NoneType' object is not callable
+in the Starlette SSE transport layer.
 """
 
 from __future__ import annotations
@@ -10,7 +17,8 @@ import json
 from typing import TYPE_CHECKING
 
 from mcp.server import Server
-from mcp.types import Resource, TextContent
+from mcp.server.lowlevel.helper_types import ReadResourceContents
+from mcp.types import Resource
 
 from mcp_ros2_bridge.resources.pose import get_pose_resources, handle_pose_resource
 from mcp_ros2_bridge.resources.scan import get_scan_resources, handle_scan_resource
@@ -62,7 +70,7 @@ def get_lerobot_resources() -> list[Resource]:
 
 async def handle_lerobot_resource(
     uri: str, resource_manager: LeRobotResourceManager
-) -> list[TextContent] | None:
+) -> str | None:
     """Handle LeRobot resource reads. Returns None if URI not handled."""
     if uri == "robot://lerobot/current_state":
         data = resource_manager.get_current_state()
@@ -80,7 +88,7 @@ async def handle_lerobot_resource(
     else:
         return None
 
-    return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    return json.dumps(data, indent=2)
 
 
 def register_resources(
@@ -102,11 +110,13 @@ def register_resources(
     all_resources = pose_resources + scan_resources + world_graph_resources
 
     # Add LeRobot resources if enabled
-    lerobot_uris = set()
+    # NOTE: Resource.uri is AnyUrl type, but handlers receive str.
+    # Convert to strings for comparison.
+    lerobot_uris: set[str] = set()
     if lerobot_resource_manager is not None:
         lerobot_resources = get_lerobot_resources()
         all_resources = all_resources + lerobot_resources
-        lerobot_uris = {r.uri for r in lerobot_resources}
+        lerobot_uris = {str(r.uri) for r in lerobot_resources}
 
     @server.list_resources()
     async def list_all_resources() -> list[Resource]:
@@ -114,29 +124,44 @@ def register_resources(
         return all_resources
 
     @server.read_resource()
-    async def read_resource(uri: str) -> list[TextContent]:
-        """Route resource reads to appropriate handler."""
+    async def read_resource(uri) -> list[ReadResourceContents]:
+        """Route resource reads to appropriate handler.
+        
+        Returns list[ReadResourceContents] - the correct SDK helper type.
+        
+        NOTE: The MCP SDK passes AnyUrl (not str) and expects ReadResourceContents
+        from mcp.server.lowlevel.helper_types (with .content and .mime_type),
+        NOT TextResourceContents from mcp.types (with .text and .mimeType).
+        """
+        # Convert AnyUrl to string for comparison
+        uri_str = str(uri)
+        json_text: str | None = None
+        
         # Try LeRobot handler first if enabled
-        if lerobot_resource_manager is not None and uri in lerobot_uris:
-            result = await handle_lerobot_resource(uri, lerobot_resource_manager)
-            if result is not None:
-                return result
+        if lerobot_resource_manager is not None and uri_str in lerobot_uris:
+            json_text = await handle_lerobot_resource(uri_str, lerobot_resource_manager)
 
         # Try each core handler
-        result = await handle_pose_resource(uri, ros_bridge)
-        if result is not None:
-            return result
+        if json_text is None:
+            json_text = await handle_pose_resource(uri_str, ros_bridge)
+        
+        if json_text is None:
+            json_text = await handle_scan_resource(uri_str, ros_bridge)
 
-        result = await handle_scan_resource(uri, ros_bridge)
-        if result is not None:
-            return result
+        if json_text is None:
+            json_text = await handle_world_graph_resource(uri_str, ros_bridge)
 
-        result = await handle_world_graph_resource(uri, ros_bridge)
-        if result is not None:
-            return result
+        # Default error response
+        if json_text is None:
+            json_text = json.dumps({"error": f"Unknown resource: {uri_str}"})
 
-        # Unknown resource
-        return [TextContent(type="text", text=f'{{"error": "Unknown resource: {uri}"}}')]
+        # Return proper MCP SDK helper type
+        return [
+            ReadResourceContents(
+                content=json_text,
+                mime_type="application/json",
+            )
+        ]
 
 
 def register_lerobot_resources(

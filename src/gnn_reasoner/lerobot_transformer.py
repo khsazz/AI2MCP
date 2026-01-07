@@ -359,8 +359,58 @@ class LeRobotGraphTransformer:
             left_gripper = observation_state[6].item() if observation_state.numel() > 6 else 0.5
             right_gripper = observation_state[13].item() if observation_state.numel() > 13 else 0.5
             graph.gripper_state = torch.tensor([left_gripper, right_gripper], dtype=torch.float32)
+        
+        # Store global context vector u for GNN conditioning
+        # This enables the predicate head to condition on gripper state
+        graph.u = self.extract_global_context(observation_state, gripper_state)
 
         return graph
+    
+    def extract_global_context(
+        self,
+        state_vector: Tensor,
+        gripper_state: float | None = None,
+    ) -> Tensor:
+        """Extract global context vector u for conditioning GNN predictions.
+        
+        The global context captures gripper states which are essential for
+        predicting interaction predicates like is_holding. This enables the
+        model to learn: is_holding = (gripper_near_object) AND (gripper_closed).
+        
+        Args:
+            state_vector: ALOHA 14-DoF state vector
+            gripper_state: Optional single gripper state (if both grippers same)
+            
+        Returns:
+            Global context vector u of shape (1, 2) where:
+              u[0] = left gripper openness (0=closed, 1=open)
+              u[1] = right gripper openness (0=closed, 1=open)
+        """
+        # ALOHA gripper range is typically 0.0 (closed) to ~0.08 (open)
+        MAX_WIDTH = 0.08
+        
+        if gripper_state is not None:
+            # Single gripper state provided - use for both
+            left_gripper = float(gripper_state)
+            right_gripper = float(gripper_state)
+        elif state_vector.numel() > 6:
+            # Extract from state vector
+            # Index 6: left gripper, Index 13: right gripper
+            raw_left = state_vector[6].item() if state_vector.numel() > 6 else 0.5
+            raw_right = state_vector[13].item() if state_vector.numel() > 13 else 0.5
+            
+            # Normalize to [0, 1] range
+            left_gripper = min(1.0, max(0.0, raw_left / MAX_WIDTH))
+            right_gripper = min(1.0, max(0.0, raw_right / MAX_WIDTH))
+        else:
+            # Default to half-open
+            left_gripper = 0.5
+            right_gripper = 0.5
+        
+        # Global context vector u: [left_grip, right_grip]
+        # Shape: (1, 2) - batch dimension for PyG batching
+        u = torch.tensor([[left_gripper, right_gripper]], dtype=torch.float32)
+        return u
 
     def to_graph_from_detections(
         self,

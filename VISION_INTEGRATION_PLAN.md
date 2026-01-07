@@ -1,7 +1,9 @@
 # Vision Integration Plan
 
-## Status: COMPLETE ✅
+## Status: COMPLETE ✅ (with documented limitations)
 Last Updated: 2025-01-06
+
+> **Note**: Implementation complete. Open questions resolved. Known limitation: heavy vision stack (~3.8GB) near RTX 500 (4GB) limit—see "Known Limitations" section.
 
 ---
 
@@ -11,9 +13,10 @@ Last Updated: 2025-01-06
 |----------|--------|-----------|------|
 | Option B (z=0 heuristic) | ❌ Rejected | Inaccurate for stacked objects | 2025-01-05 |
 | Implementation scope | Both A + C | Comparative study for thesis | 2025-01-05 |
-| Vision encoder | DINOv2-B | Higher accuracy, acceptable latency | 2025-01-05 |
-| Depth model | ZoeDepth | State-of-art monocular depth | 2025-01-05 |
-| Object detector | DETIC | Open-vocabulary capability | 2025-01-05 |
+| Vision encoder | DINOv2-S (22M, frozen) | Fits 4GB VRAM; DINOv2-B too large | 2025-01-06 |
+| Depth model | ZoeDepth (primary) | State-of-art monocular depth; DepthAnything fallback | 2025-01-05 |
+| Object detector | GroundingDINO (primary) | Open-vocabulary; DETIC requires Detectron2 setup | 2025-01-06 |
+| Hardware target | RTX 4080 for training | RTX 500 (4GB) too constrained for heavy stack | 2025-01-06 |
 
 ---
 
@@ -243,9 +246,9 @@ is_approaching = dot(velocity, object_direction) > 0
 ### DINOv2 Variants
 | Variant | Params | Feature Dim | Latency (RTX 500) | Status |
 |---------|--------|-------------|-------------------|--------|
-| DINOv2-S | 22M | 384 | ~15ms | Backup |
-| DINOv2-B | 86M | 768 | ~25ms | **Selected** |
-| DINOv2-L | 300M | 1024 | ~60ms | Too slow |
+| DINOv2-S | 22M | 384 | ~15ms | **Selected** (fits 4GB VRAM) |
+| DINOv2-B | 86M | 768 | ~25ms | Too large for RTX 500 with full stack |
+| DINOv2-L | 300M | 1024 | ~60ms | Too slow/large |
 
 ### DETIC Configuration
 - Backbone: Swin-B
@@ -332,11 +335,36 @@ Note: Both require DETIC for object localization. Option C trades depth estimati
 
 ---
 
-## Open Questions
+## Open Questions — RESOLVED ✅
 
-1. [ ] LeRobot ALOHA camera intrinsics — where to find?
-2. [ ] DETIC vs GroundingDINO — which has better open-vocab?
-3. [ ] Memory constraints with DINOv2-B on RTX 500 (4GB)?
+| Question | Resolution | Source |
+|----------|------------|--------|
+| 1. Camera intrinsics location | `meta/info.json` → `features["observation.images.cam_high"]["video_info"]` OR hardware defaults (60° FOV for ALOHA webcam). **Using defaults via `CameraIntrinsics.default_aloha()`** | PDF §2.2 |
+| 2. DETIC vs GroundingDINO | GroundingDINO better for referential grounding. **YOLO-World recommended for edge deployment** (0.5GB vs 1.5GB). Current: Using GroundingDINO. | PDF §3 |
+| 3. 4GB VRAM constraints | **Current stack (~3.7GB) near/exceeds RTX 500 limit**. PDF recommends "Edge-Native" stack: YOLO-World + Depth Anything V2 Small (~0.9GB). See limitations below. | PDF §4 |
+
+---
+
+## Known Limitations
+
+### Hardware Constraints (RTX 500 Ada, 4GB VRAM)
+
+The current "heavy" perception stack is at the limit of 4GB VRAM:
+
+| Stack | Components | Est. VRAM | Status |
+|-------|-----------|-----------|--------|
+| **Current (Heavy)** | GroundingDINO (1.5GB) + ZoeDepth (1.2GB) + DINOv2-S (1.0GB) | ~3.7GB | ⚠️ Tight fit |
+| **Edge-Native (Recommended)** | YOLO-World-S (0.5GB) + Depth Anything V2 Small (0.3GB) | ~0.9GB | ✅ Fits easily |
+
+**Workarounds**:
+1. Development: Use `MockVisionDetector` / `MockDepthEstimator`
+2. Training: Use RTX 4080 (16GB) for full model training
+3. Deployment: Consider edge-native stack for RTX 500
+
+### Future Enhancement: Edge-Native Profile
+- [ ] Add YOLO-World to `detector.py`
+- [ ] Create `--profile edge` flag for training scripts
+- [ ] Document edge deployment path in README
 
 ---
 

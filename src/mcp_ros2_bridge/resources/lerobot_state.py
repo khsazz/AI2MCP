@@ -10,7 +10,7 @@ import json
 from typing import TYPE_CHECKING
 
 from mcp.server import Server
-from mcp.types import Resource, TextContent
+from mcp.types import Resource
 
 if TYPE_CHECKING:
     from gnn_reasoner.data_manager import DataManager
@@ -184,8 +184,8 @@ def register_lerobot_resources(
         return existing_resources + lerobot_resources
 
     @server.read_resource()
-    async def read_lerobot_resource(uri: str) -> list[TextContent]:
-        """Read LeRobot resources."""
+    async def read_lerobot_resource(uri: str) -> str:
+        """Read LeRobot resources. Returns JSON string."""
         if uri == "robot://lerobot/current_state":
             data = resource_manager.get_current_state()
 
@@ -209,5 +209,5 @@ def register_lerobot_resources(
         else:
             data = {"error": f"Unknown resource: {uri}"}
 
-        return [TextContent(type="text", text=json.dumps(data, indent=2))]
+        return json.dumps(data, indent=2)
 

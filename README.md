@@ -18,6 +18,7 @@
 | **Pass@1 Prediction** | 88.2% |
 | **Pass@3 Prediction** | 98.2% |
 | **Inference Latency** | 2.4ms (kinematic) / 52ms (multimodal) |
+| **Llama Agent E2E** | ✅ 3 steps, 5.3s (local Ollama) |
 
 ## Overview
 
@@ -125,6 +126,46 @@ python scripts/run_experiment.py --agent claude --goal "Navigate to position (3,
 
 # With Llama (requires Ollama running locally)
 python scripts/run_experiment.py --agent llama --goal "Navigate to position (3, -3)"
+```
+
+#### Option C: LeRobot + Ollama Demo (No ROS required)
+
+This is the simplest way to test the full LLM → MCP → GNN pipeline:
+
+**Step 1: Install Ollama**
+```bash
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull llama3.2 (3B, 2.0GB)
+ollama pull llama3.2
+
+# Verify
+ollama list
+```
+
+**Step 2: Start MCP Server with LeRobot**
+```bash
+source .venv/bin/activate
+python -m mcp_ros2_bridge.server --lerobot
+```
+
+**Step 3: Run Llama Agent (new terminal)**
+```bash
+source .venv/bin/activate
+python scripts/run_experiment.py --agent llama --goal "Query world graph and report predicates"
+```
+
+**Expected Output:**
+```json
+{
+  "success": true,
+  "total_steps": 3,
+  "duration_seconds": 5.3,
+  "observation": {
+    "world_graph": {"num_nodes": 16, "num_edges": 54}
+  }
+}
 ```
 
 ## Project Structure
@@ -330,6 +371,7 @@ python scripts/generate_thesis_figures.py --output figures/
 | `MCP_SERVER_PORT` | `8080` | MCP server port |
 | `ANTHROPIC_API_KEY` | - | Claude API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
+| `OLLAMA_MODEL` | `llama3.2` | Ollama model name (llama3.2 recommended) |
 
 ### Agent Configuration
 
@@ -361,6 +403,16 @@ ruff check src/
 # Format
 ruff format src/
 ```
+
+## Known Issues
+
+| Issue | Status | Workaround |
+|-------|--------|------------|
+| MCP SSE resource transport bug | ⚠️ Library bug | Agent uses tool results instead of resources |
+| LLM sends string numbers (`"0"` vs `0`) | ✅ Fixed | Auto-coerced in `MCPClient.call_tool()` |
+| Llama 3B loops on complex prompts | ✅ Fixed | Simplified system prompt with explicit rules |
+
+> **Note on Resource Bug**: MCP SDK v1.25.0 has a bug in the SSE transport layer for resources - the ASGI handler returns `None` instead of a proper response. Tools work correctly. The agent works around this by using `get_world_graph` tool calls instead of `robot://lerobot/world_graph` resource reads. This adds one extra round trip but maintains full functionality.
 
 ## Vision Integration (NEW)
 
@@ -412,6 +464,17 @@ python scripts/compare_models.py --model-a experiments/aloha_training/best_model
 # Run ablation study
 python scripts/ablation_depth_noise.py --frames 200 --output experiments/ablation_depth
 ```
+
+### Hardware Requirements
+
+| Mode | GPU | VRAM | Stack |
+|------|-----|------|-------|
+| **Development** | Any (CPU OK) | - | Mock detectors |
+| **Kinematic GNN** | RTX 500+ | 1GB | RelationalGNN only |
+| **MultiModal (Heavy)** | RTX 4080+ | 4GB+ | GroundingDINO + ZoeDepth + DINOv2 |
+| **MultiModal (Edge)** | RTX 500 | 1GB | YOLO-World + DepthAnything V2 Small |
+
+> **Note**: The "heavy" vision stack (GroundingDINO + ZoeDepth + DINOv2) requires ~3.8GB VRAM. For RTX 500 (4GB) deployment, use mock detectors during development or the edge-native stack (YOLO-World + Depth Anything V2 Small, ~0.9GB).
 
 ---
 

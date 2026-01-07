@@ -339,7 +339,11 @@ class VisionDetector:
 
 
 class MockVisionDetector:
-    """Mock detector for testing without GPU/model weights."""
+    """Mock detector for testing without GPU/model weights.
+    
+    Supports generating detections at specific image locations to simulate
+    objects near the gripper for training is_holding predicates.
+    """
 
     def __init__(self, **kwargs) -> None:
         logger.info("Using MockVisionDetector (no real detection)")
@@ -348,13 +352,45 @@ class MockVisionDetector:
         self,
         image: np.ndarray,
         prompts: list[str] | None = None,
+        gripper_pixel: tuple[int, int] | None = None,
+        spawn_at_gripper: bool = False,
     ) -> list[Detection]:
-        """Return synthetic detections for testing."""
+        """Return synthetic detections for testing.
+        
+        Args:
+            image: Input image (H, W, 3)
+            prompts: Object class names to use
+            gripper_pixel: Optional (u, v) pixel location of gripper
+            spawn_at_gripper: If True and gripper_pixel provided, spawn 
+                             an object detection at the gripper location
+                             (for simulating holding scenarios)
+        
+        Returns:
+            List of Detection objects
+        """
         h, w = image.shape[:2]
-
-        # Generate 1-3 random detections
-        num_detections = np.random.randint(1, 4)
         detections = []
+        
+        # Spawn object at gripper location (for holding scenarios)
+        if spawn_at_gripper and gripper_pixel is not None:
+            cx, cy = gripper_pixel
+            # Small bbox at gripper location (held object)
+            bw, bh = np.random.randint(40, 80), np.random.randint(40, 80)
+            x1, y1 = max(0, cx - bw // 2), max(0, cy - bh // 2)
+            x2, y2 = min(w, cx + bw // 2), min(h, cy + bh // 2)
+            
+            class_name = prompts[0] if prompts else "held_object"
+            
+            detections.append(
+                Detection(
+                    class_name=class_name,
+                    confidence=np.random.uniform(0.85, 0.98),
+                    bbox=(x1, y1, x2, y2),
+                )
+            )
+
+        # Generate 1-3 additional random detections
+        num_detections = np.random.randint(1, 4)
 
         for i in range(num_detections):
             # Random bounding box
@@ -375,6 +411,50 @@ class MockVisionDetector:
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
         return detections
+    
+    def detect_at_position(
+        self,
+        image: np.ndarray,
+        position_3d: np.ndarray,
+        class_name: str = "held_object",
+        size_px: int = 60,
+    ) -> Detection:
+        """Create a detection at a specific 3D position.
+        
+        This is useful for simulating objects exactly at gripper position
+        for training is_holding predicates.
+        
+        Args:
+            image: Input image for getting dimensions
+            position_3d: 3D world position (x, y, z)
+            class_name: Object class name
+            size_px: Bounding box size in pixels
+            
+        Returns:
+            Single Detection at the specified position
+        """
+        h, w = image.shape[:2]
+        
+        # Simple orthographic projection (assumes camera at origin looking at +z)
+        # Scale factor to convert meters to pixels (rough approximation)
+        scale = 500  # pixels per meter at 1m distance
+        
+        # Project to image plane
+        cx = int(w / 2 + position_3d[0] * scale)
+        cy = int(h / 2 - position_3d[1] * scale)  # y is flipped in image coords
+        
+        # Clamp to image bounds
+        cx = np.clip(cx, size_px // 2, w - size_px // 2)
+        cy = np.clip(cy, size_px // 2, h - size_px // 2)
+        
+        x1, y1 = cx - size_px // 2, cy - size_px // 2
+        x2, y2 = cx + size_px // 2, cy + size_px // 2
+        
+        return Detection(
+            class_name=class_name,
+            confidence=np.random.uniform(0.9, 0.99),
+            bbox=(x1, y1, x2, y2),
+        )
 
     @property
     def is_open_vocabulary(self) -> bool:

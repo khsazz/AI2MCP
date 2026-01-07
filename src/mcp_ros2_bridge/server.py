@@ -19,7 +19,7 @@ import structlog
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
-from starlette.routing import Route
+from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -186,12 +186,6 @@ class MCPRos2Server:
                 )
             return Response()
 
-        async def handle_messages(request: Request) -> Response:
-            """Handle POST messages from MCP client."""
-            return await self.sse_transport.handle_post_message(
-                request.scope, request.receive, request._send
-            )
-
         async def health_check(request: Request) -> Response:
             """Health check endpoint."""
             ros_status = "connected" if self.ros_bridge and self.ros_bridge.is_connected else "disconnected"
@@ -206,12 +200,16 @@ class MCPRos2Server:
             yield
             await self.shutdown()
 
+        # IMPORTANT: Use Mount for handle_post_message, not Route.
+        # handle_post_message is an ASGI app, not a Starlette endpoint.
+        # Using Route caused "TypeError: 'NoneType' object is not callable"
+        # because Route expects the endpoint to return a Response.
         return Starlette(
             debug=True,
             lifespan=lifespan,
             routes=[
                 Route("/sse", endpoint=handle_sse),
-                Route("/messages/", endpoint=handle_messages, methods=["POST"]),
+                Mount("/messages", app=self.sse_transport.handle_post_message),
                 Route("/health", endpoint=health_check),
             ],
         )
