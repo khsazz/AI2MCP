@@ -25,6 +25,12 @@ from gnn_reasoner.model.forward_dynamics import (
     DynamicsNetwork,
     ForwardDynamicsLoss,
 )
+from gnn_reasoner.model.spatiotemporal_gnn import (
+    SpatiotemporalGNN,
+    TemporalGRU,
+    FutureProjectionHead,
+    TemporalPrediction,
+)
 
 __all__ = [
     # Scene GNN (legacy)
@@ -51,5 +57,10 @@ __all__ = [
     "ActionEncoder",
     "DynamicsNetwork",
     "ForwardDynamicsLoss",
+    # Spatiotemporal GNN (Phase 11 - Temporal Verifiers)
+    "SpatiotemporalGNN",
+    "TemporalGRU",
+    "FutureProjectionHead",
+    "TemporalPrediction",
 ]
 

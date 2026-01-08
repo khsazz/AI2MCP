@@ -7,8 +7,8 @@ Simulates the difference between ground-truth depth (simulation) and
 estimated depth (monocular depth estimation like ZoeDepth).
 
 Usage:
-    python scripts/ablation_depth_noise.py --model-a experiments/aloha_training/best_model.pt \
-        --model-c experiments/multimodal_aloha/best_model.pt --frames 200
+    python scripts/ablation_depth_noise.py --model-a experiments/remote_training/relational_gnn/best_model.pt \
+        --model-c experiments/remote_training/multimodal_gnn_55k_v2/best_model.pt --frames 200
 """
 
 import argparse
@@ -318,9 +318,9 @@ def generate_figures(results: Dict, output_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Depth noise ablation study")
-    parser.add_argument("--model-a", type=str, default="experiments/aloha_training/best_model.pt",
+    parser.add_argument("--model-a", type=str, default="experiments/remote_training/relational_gnn/best_model.pt",
                         help="Path to RelationalGNN checkpoint")
-    parser.add_argument("--model-c", type=str, default="experiments/multimodal_aloha/best_model.pt",
+    parser.add_argument("--model-c", type=str, default="experiments/remote_training/multimodal_gnn_55k_v2/best_model.pt",
                         help="Path to MultiModalGNN checkpoint")
     parser.add_argument("--frames", type=int, default=200,
                         help="Number of frames to evaluate")

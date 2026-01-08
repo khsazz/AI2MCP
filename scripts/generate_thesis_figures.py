@@ -209,26 +209,43 @@ def plot_inference_latency(benchmark: dict, output_dir: Path) -> None:
 
 
 def plot_predicate_distribution(output_dir: Path) -> None:
-    """Plot predicate type distribution from benchmark data."""
+    """Plot predicate type distribution from latest comparison results."""
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    # Based on latest benchmark output (200 frames)
-    predicates = ['is_near', 'is_right_of', 'is_left_of', 'is_above', 'is_below']
-    counts = [8539, 4769, 4727, 0, 0]  # From trained model benchmark
-    
-    colors = [COLORS['primary'] if c > 0 else '#cccccc' for c in counts]
-    
-    bars = ax.barh(predicates, counts, color=colors)
-    ax.set_xlabel('Total Detections (200 frames)')
-    ax.set_title('Spatial Predicate Distribution (Trained Model)')
-    
-    # Add value labels
-    for bar, count in zip(bars, counts):
-        if count > 0:
-            ax.text(count + 100, bar.get_y() + bar.get_height()/2,
-                    f'{count:,}', va='center', fontsize=10)
-    
-    ax.set_xlim(0, max(counts) * 1.15)
+    # Load from latest comparison results (2026-01-08)
+    comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
+    if comparison_path.exists():
+        import json
+        with open(comparison_path) as f:
+            results = json.load(f)
+        # Use per-predicate accuracy as proxy for detection quality
+        predicates = list(results["option_a"]["accuracy"]["per_predicate"].keys())
+        # Show F1 scores (most informative)
+        f1_scores = list(results["option_a"]["accuracy"]["f1_per_predicate"].values())
+        
+        colors = [COLORS['primary'] if f1 > 0 else '#cccccc' for f1 in f1_scores]
+        bars = ax.barh(predicates, f1_scores, color=colors)
+        ax.set_xlabel('F1 Score')
+        ax.set_title('Per-Predicate F1 Score (RelationalGNN, 500 frames)')
+        
+        # Add value labels
+        for bar, f1 in zip(bars, f1_scores):
+            if f1 > 0:
+                ax.text(f1 + 0.02, bar.get_y() + bar.get_height()/2,
+                        f'{f1:.3f}', va='center', fontsize=10)
+        
+        ax.set_xlim(0, 1.1)
+    else:
+        # Fallback: Updated estimates from CONTEXT_DUMP.txt
+        predicates = ['is_near', 'is_right_of', 'is_left_of', 'is_above', 'is_below',
+                      'is_holding', 'is_contacting', 'is_approaching', 'is_retracting']
+        f1_scores = [0.954, 0.968, 0.969, 0.0, 0.0, 0.0, 0.0, 0.182, 0.152]
+        
+        colors = [COLORS['primary'] if f1 > 0 else '#cccccc' for f1 in f1_scores]
+        bars = ax.barh(predicates, f1_scores, color=colors)
+        ax.set_xlabel('F1 Score')
+        ax.set_title('Per-Predicate F1 Score (RelationalGNN)')
+        ax.set_xlim(0, 1.1)
     
     plt.tight_layout()
     
@@ -382,18 +399,43 @@ def plot_comparison_table(output_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.axis('off')
     
-    # Updated with actual benchmark results
-    data = [
-        ['Metric', 'Synthetic Training', 'ALOHA Training', 'Trained Inference'],
-        ['Final Accuracy', '95.9%', '99.4%', '92.5%*'],
-        ['Best Val Loss', '0.1086', '0.0232', '—'],
-        ['Pass@1', '—', '—', '88.2%'],
-        ['Pass@3', '—', '—', '98.2%'],
-        ['Precision/Recall', '—', '—', '84.5% / 79.9%'],
-        ['F1 Score', '—', '—', '82.1%'],
-        ['Inference Latency', '—', '—', '12.6ms (p95)'],
-        ['Protocol Overhead', '—', '—', '30.4%'],
-    ]
+    # Load from latest comparison results (2026-01-08)
+    comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
+    if comparison_path.exists():
+        import json
+        with open(comparison_path) as f:
+            results = json.load(f)
+        a = results["option_a"]
+        c = results["option_c"]
+        
+        data = [
+            ['Metric', 'RelationalGNN (A)', 'MultiModalGNN (C)', 'Winner'],
+            ['Micro Accuracy', f'{a["accuracy"]["micro_accuracy"]*100:.1f}%', 
+             f'{c["accuracy"]["micro_accuracy"]*100:.1f}%', 'A ✓'],
+            ['Macro F1', f'{a["accuracy"]["macro_f1"]:.3f}', 
+             f'{c["accuracy"]["macro_f1"]:.3f}', 'A ✓'],
+            ['is_near F1', f'{a["accuracy"]["f1_per_predicate"]["is_near"]:.3f}', 
+             f'{c["accuracy"]["f1_per_predicate"]["is_near"]:.3f}', 'A ✓'],
+            ['Latency (mean)', f'{a["latency_ms"]["mean"]:.2f}ms', 
+             f'{c["latency_ms"]["mean"]:.2f}ms', 'A (16×)'],
+            ['Memory (peak)', f'{a["memory_mb"]["peak"]:.1f}MB', 
+             f'{c["memory_mb"]["peak"]:.1f}MB', 'A (7×)'],
+            ['Model Size', f'{a["memory_mb"]["model_size"]:.2f}MB', 
+             f'{c["memory_mb"]["model_size"]:.2f}MB', 'A (2.6×)'],
+            ['Training (55k)', '29 min', '31 min', '—'],
+        ]
+    else:
+        # Fallback with updated values from CONTEXT_DUMP.txt
+        data = [
+            ['Metric', 'RelationalGNN (A)', 'MultiModalGNN (C)', 'Winner'],
+            ['Micro Accuracy', '97.03%', '96.51%', 'A ✓'],
+            ['Macro F1', '0.358', '0.348', 'A ✓'],
+            ['is_near F1', '0.954', '0.920', 'A ✓'],
+            ['Latency (mean)', '1.52ms', '24.29ms', 'A (16×)'],
+            ['Memory (peak)', '19.4MB', '141.8MB', 'A (7×)'],
+            ['Model Size', '0.81MB', '2.14MB', 'A (2.6×)'],
+            ['Training (55k)', '29 min', '31 min', '—'],
+        ]
     
     table = ax.table(
         cellText=data,
@@ -434,55 +476,82 @@ def plot_comparison_table(output_dir: Path) -> None:
 
 
 def plot_before_after_comparison(output_dir: Path) -> None:
-    """Plot before/after benchmark comparison."""
+    """Plot Option A vs Option C comparison (fair comparison, 55k vs 55k)."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
-    # Pass@k comparison
-    ax1 = axes[0]
-    k_values = ['pass@1', 'pass@3', 'pass@5', 'pass@10']
-    before = [0, 0, 0, 0]  # Untrained model
-    after = [88.17, 98.16, 98.16, 98.16]  # Trained model
+    # Load from latest comparison results
+    comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
+    if comparison_path.exists():
+        import json
+        with open(comparison_path) as f:
+            results = json.load(f)
+        a_acc = results["option_a"]["accuracy"]["micro_accuracy"] * 100
+        c_acc = results["option_c"]["accuracy"]["micro_accuracy"] * 100
+        a_f1 = results["option_a"]["accuracy"]["macro_f1"]
+        c_f1 = results["option_c"]["accuracy"]["macro_f1"]
+        a_lat = results["option_a"]["latency_ms"]["mean"]
+        c_lat = results["option_c"]["latency_ms"]["mean"]
+    else:
+        a_acc, c_acc = 97.03, 96.51
+        a_f1, c_f1 = 0.358, 0.348
+        a_lat, c_lat = 1.52, 24.29
     
-    x = np.arange(len(k_values))
+    # Accuracy comparison
+    ax1 = axes[0]
+    metrics = ['Micro\nAccuracy (%)', 'Macro F1\n(×100)']
+    option_a = [a_acc, a_f1 * 100]
+    option_c = [c_acc, c_f1 * 100]
+    
+    x = np.arange(len(metrics))
     width = 0.35
     
-    bars1 = ax1.bar(x - width/2, before, width, label='Before (Untrained)', 
-                     color='#cccccc', edgecolor='black')
-    bars2 = ax1.bar(x + width/2, after, width, label='After (Trained)', 
-                     color=COLORS['success'], edgecolor='black')
+    bars1 = ax1.bar(x - width/2, option_a, width, label='RelationalGNN (A)', 
+                     color=COLORS['primary'], edgecolor='black')
+    bars2 = ax1.bar(x + width/2, option_c, width, label='MultiModalGNN (C)', 
+                     color=COLORS['secondary'], edgecolor='black')
     
-    ax1.set_ylabel('Accuracy (%)')
-    ax1.set_title('(a) Pass@k Improvement')
+    ax1.set_ylabel('Score')
+    ax1.set_title('(a) Accuracy Comparison (55k frames)')
     ax1.set_xticks(x)
-    ax1.set_xticklabels(['k=1', 'k=3', 'k=5', 'k=10'])
-    ax1.legend(loc='upper left')
+    ax1.set_xticklabels(metrics)
+    ax1.legend(loc='lower right')
     ax1.set_ylim(0, 110)
     
     # Add value labels
-    for bar, val in zip(bars2, after):
-        ax1.annotate(f'{val:.1f}%',
+    for bar, val in zip(bars1, option_a):
+        ax1.annotate(f'{val:.1f}',
                     xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
                     xytext=(0, 3), textcoords="offset points",
                     ha='center', va='bottom', fontsize=10, fontweight='bold')
+    for bar, val in zip(bars2, option_c):
+        ax1.annotate(f'{val:.1f}',
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=10)
     
-    # Timing comparison
+    # Latency comparison
     ax2 = axes[1]
-    metrics = ['Inference\nLatency', 'Graph\nConstruction', 'Serialization', 'Total\nRequest']
-    before_timing = [7.7, 1.3, 0.2, 9.3]  # From old benchmark
-    after_timing = [12.6, 1.7, 0.15, 18.2]  # From new benchmark
+    models = ['RelationalGNN\n(A)', 'MultiModalGNN\n(C)']
+    latencies = [a_lat, c_lat]
+    colors = [COLORS['primary'], COLORS['secondary']]
     
-    x = np.arange(len(metrics))
-    
-    bars1 = ax2.bar(x - width/2, before_timing, width, label='Baseline', 
-                     color=COLORS['primary'], edgecolor='black', alpha=0.7)
-    bars2 = ax2.bar(x + width/2, after_timing, width, label='With Accuracy Tracking', 
-                     color=COLORS['secondary'], edgecolor='black', alpha=0.7)
-    
+    bars = ax2.bar(models, latencies, color=colors, edgecolor='black')
     ax2.set_ylabel('Latency (ms)')
-    ax2.set_title('(b) Timing Overhead')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(metrics)
-    ax2.legend(loc='upper left')
+    ax2.set_title('(b) Inference Latency')
+    
+    # Add speedup annotation
+    speedup = c_lat / a_lat
+    ax2.annotate(f'{speedup:.0f}× faster',
+                 xy=(0, a_lat), xytext=(0.5, c_lat * 0.6),
+                 arrowprops=dict(arrowstyle='->', color='black'),
+                 fontsize=12, fontweight='bold', ha='center')
+    
+    # Add value labels
+    for bar, val in zip(bars, latencies):
+        ax2.annotate(f'{val:.1f}ms',
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     plt.tight_layout()
     
@@ -504,7 +573,7 @@ def main():
     parser.add_argument(
         "--training-history",
         type=Path,
-        default=Path("experiments/aloha_training/training_history.json"),
+        default=Path("experiments/remote_training/relational_gnn/training_history.json"),
         help="Path to training history JSON",
     )
     parser.add_argument(

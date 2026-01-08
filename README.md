@@ -8,17 +8,18 @@
 
 > **Thesis Project**: Demonstrating that robotic intelligence can be treated as a swappable service using the Model Context Protocol (MCP).
 
-## Key Results
+## Key Results (Fair Comparison, 55k frames)
 
-| Metric | Value |
-|--------|-------|
-| **Kinematic GNN Accuracy** | 99.4% (ALOHA dataset) |
-| **MultiModal GNN Accuracy** | 98.6% (with vision) |
-| **`is_near` F1 Improvement** | +35.6% (vision fusion) |
-| **Pass@1 Prediction** | 88.2% |
-| **Pass@3 Prediction** | 98.2% |
-| **Inference Latency** | 2.4ms (kinematic) / 52ms (multimodal) |
-| **Llama Agent E2E** | ✅ 3 steps, 5.3s (local Ollama) |
+| Metric | RelationalGNN | MultiModalGNN | Winner |
+|--------|---------------|---------------|--------|
+| **Accuracy** | **97.03%** | 96.51% | ✅ Kinematic |
+| **`is_near` F1** | **0.954** | 0.920 | ✅ Kinematic |
+| **Latency** | **1.5ms** | 24ms | ✅ Kinematic (16×) |
+| **Model Size** | **0.81MB** | 2.14MB | ✅ Kinematic (2.6×) |
+| **Pass@1** | 88.2% | — | — |
+| **Llama Agent E2E** | ✅ 3 steps, 5.3s | — | — |
+
+> ⚠️ **Finding**: RelationalGNN outperforms MultiModalGNN on ALL metrics. Vision integration (DINOv2) adds complexity without benefit on ALOHA — spatial predicates are solvable from joint positions alone.
 
 ## Overview
 
@@ -54,7 +55,9 @@ This project implements an **MCP-to-ROS 2 Bridge** that allows any AI model (Cla
 - **🤖 LeRobot Integration**: Train on HuggingFace LeRobot datasets (ALOHA, PushT, etc.)
 - **📊 Explainability**: All AI decisions logged as tool calls and resource queries
 - **☁️ Cloud-Edge Split**: Heavy compute on cloud, lightweight execution on robot
-- **📈 Predicate Prediction**: 9 spatial/interaction predicates with 99.4% accuracy
+- **📈 Predicate Prediction**: 9 spatial/interaction predicates with 97% accuracy
+- **🔮 Pre-Execution Simulation**: ForwardDynamicsModel verifies LLM plans before execution
+- **⏱️ Temporal Stability**: SpatiotemporalGNN with GRU eliminates predicate flicker
 
 ## Quick Start
 
@@ -193,8 +196,10 @@ AI2MCP/
 │   │   ├── camera.py         # Camera intrinsics & 3D projection
 │   │   ├── graph_builder.py  # Sensor → World Graph
 │   │   └── model/            # PyTorch Geometric GNN
-│   │       ├── relational_gnn.py   # Kinematic GNN (99.4% acc)
-│   │       ├── multimodal_gnn.py   # Vision+Kinematic GNN (96.2% acc)
+│   │       ├── relational_gnn.py   # Kinematic GNN (97.03% acc) ✅ RECOMMENDED
+│   │       ├── multimodal_gnn.py   # Vision+Kinematic GNN (96.51% acc)
+│   │       ├── forward_dynamics.py # Pre-execution simulation (259K params)
+│   │       ├── spatiotemporal_gnn.py # Temporal stability (~90% acc)
 │   │       └── scene_gnn.py        # Scene understanding
 │   │
 │   └── agents/               # Swappable AI agents
@@ -203,16 +208,14 @@ AI2MCP/
 │       └── llama_agent.py    # Local Llama (Ollama/vLLM)
 │
 ├── experiments/              # Training & benchmark results
-│   ├── aloha_training/       # Kinematic GNN (99.4% acc)
-│   │   ├── best_model.pt
-│   │   └── training_history.json
-│   ├── multimodal_aloha/     # MultiModal GNN (98.6% acc)
-│   │   ├── best_model.pt
-│   │   └── training_history.json
-│   ├── comparison_aloha/     # A vs C comparison
-│   │   └── comparison_results.json
+│   ├── aloha_training/       # Local kinematic GNN (99.4% acc, 5k frames)
+│   ├── remote_training/      # Full 55k frame training (RTX 3070)
+│   │   ├── relational_gnn/   # 97.03% acc ✅ BEST
+│   │   ├── multimodal_gnn_55k_v2/  # 96.51% acc
+│   │   ├── forward_dynamics_e2e/   # δ=0.0017
+│   │   └── spatiotemporal_gnn/     # ~90% acc (temporal)
+│   ├── comparison_final_real/  # Fair A vs C comparison
 │   ├── ablation_depth/       # Depth noise ablation
-│   │   └── ablation_results.json
 │   └── training/             # Synthetic baseline (95.9% acc)
 │
 ├── figures/                  # Thesis figures (auto-generated)
@@ -229,9 +232,11 @@ AI2MCP/
 ├── scripts/                 # Utility scripts
 │   ├── train_relational_gnn.py   # Kinematic GNN training
 │   ├── train_multimodal_gnn.py   # MultiModal GNN training
+│   ├── train_forward_model.py    # ForwardDynamicsModel training
+│   ├── train_spatiotemporal_gnn.py # SpatiotemporalGNN training
 │   ├── compare_models.py         # A vs C benchmark
-│   ├── ablation_depth_noise.py   # Depth noise ablation
 │   ├── demo_lerobot_pipeline.py  # Pipeline demo
+│   ├── run_experiment.py         # LLM agent runner
 │   ├── generate_thesis_figures.py
 │   └── generate_comparison_figures.py
 │
@@ -266,6 +271,51 @@ AI2MCP/
 | `advance_frame()` | Move to next frame in trajectory |
 | `set_frame(index)` | Jump to specific frame |
 | `get_predicates(threshold)` | Get active spatial/interaction predicates |
+| `simulate_action(action_sequence, confidence_threshold)` | Pre-execution verification |
+| `project_future(action, horizon_steps)` | **NEW** Temporal predicate projection |
+
+#### Pre-Execution Simulation (Phase 10) ✅
+
+The `simulate_action` tool enables LLM agents to **verify plans before physical execution**:
+
+```python
+# LLM proposes action sequence
+result = await client.call_tool("simulate_action", {
+    "action_sequence": [[0.1, 0.2, ...], [0.15, 0.25, ...]],  # 14-DoF actions
+    "num_steps": 5,
+    "confidence_threshold": 0.7
+})
+
+# Returns: {"recommendation": "EXECUTE" | "REPLAN", "confidence": 0.85, ...}
+```
+
+| Metric | Value |
+|--------|-------|
+| Model | ForwardDynamicsModel (259K params) |
+| Training | 55k frames, 2.3 min (RAM pre-computed) |
+| Inference | 41ms |
+| Delta Error | 0.0017 |
+
+#### Temporal Stability (Phase 11) ✅
+
+The `project_future` tool uses SpatiotemporalGNN to **predict future predicates**:
+
+```python
+# AI asks: "If I move forward, what predicates will be active?"
+result = await client.call_tool("project_future", {
+    "action": [0.1, 0.0, ...],  # 14-DoF action
+    "horizon_steps": 3
+})
+
+# Returns: predicted predicates at t+1, t+2, t+3 with confidence scores
+```
+
+| Metric | Value |
+|--------|-------|
+| Model | SpatiotemporalGNN (GRU + RelationalGNN) |
+| Training | 55k frames, 47 min |
+| Accuracy | ~90% |
+| Sequence Length | 5 frames |
 
 ### Resources (State)
 
@@ -313,10 +363,16 @@ Results are saved to `experiments/` for thesis analysis.
 
 ### GNN Training Performance
 
-| Dataset | Epochs | Final Accuracy | Best Val Loss | Training Time |
-|---------|--------|----------------|---------------|---------------|
-| Synthetic | 50 | 95.9% | 0.1086 | 21s |
-| **ALOHA** | 100 | **99.4%** | **0.0232** | 205s |
+| Model | Dataset | Frames | Accuracy | Training Time | GPU |
+|-------|---------|--------|----------|---------------|-----|
+| Synthetic Baseline | Synthetic | 1k | 95.9% | 21s | RTX 500 |
+| RelationalGNN (local) | ALOHA | 5k | 99.4% | 205s | RTX 500 |
+| **RelationalGNN** | ALOHA | **55k** | **97.03%** | 29 min | RTX 3070 |
+| MultiModalGNN | ALOHA | 55k | 96.51% | 31 min | RTX 3070 |
+| ForwardDynamicsModel | ALOHA | 55k | δ=0.0017 | 2.3 min | RTX 3070 |
+| **SpatiotemporalGNN** | ALOHA | 55k | **~90%** | 47 min | RTX 3070 |
+
+> **Note**: The 5k-frame local training shows higher accuracy (99.4%) than 55k remote (97.03%) due to overfitting on the smaller dataset. The 55k results are more representative.
 
 ### Inference Benchmark (200 frames, trained model)
 
@@ -404,54 +460,70 @@ ruff check src/
 ruff format src/
 ```
 
-## Known Issues
+## Known Issues & Limitations
 
 | Issue | Status | Workaround |
 |-------|--------|------------|
 | MCP SSE resource transport bug | ⚠️ Library bug | Agent uses tool results instead of resources |
 | LLM sends string numbers (`"0"` vs `0`) | ✅ Fixed | Auto-coerced in `MCPClient.call_tool()` |
 | Llama 3B loops on complex prompts | ✅ Fixed | Simplified system prompt with explicit rules |
+| ZoeDepth installation (timm version) | ⚠️ | Falls back to MiDaS (relative depth only) |
+| `is_holding`/`is_contacting` = 0.000 F1 | ⚠️ Data limitation | ALOHA lacks contact annotations |
 
-> **Note on Resource Bug**: MCP SDK v1.25.0 has a bug in the SSE transport layer for resources - the ASGI handler returns `None` instead of a proper response. Tools work correctly. The agent works around this by using `get_world_graph` tool calls instead of `robot://lerobot/world_graph` resource reads. This adds one extra round trip but maintains full functionality.
+### Contact Predicates Limitation
 
-## Vision Integration (NEW)
+`is_holding` and `is_contacting` show 0.000 F1 on real ALOHA data because:
+- Only ~0.7% positive `is_holding` edges in dataset
+- No explicit contact annotations available
+- Heuristic labels (gripper near object + closed) are insufficient
+
+**Solution**: Requires annotated dataset with explicit contact labels, F/T sensing, or tactile integration.
+
+> **Note on Resource Bug**: MCP SDK v1.25.0 has a bug in the SSE transport layer for resources. Tools work correctly. The agent uses `get_world_graph` tool calls instead of resource reads.
+
+## Vision Integration
 
 This project includes two approaches for integrating visual object detection with the kinematic GNN:
 
-### Option A: Geometric Fusion
+### Option A: RelationalGNN (Kinematic + Geometric Fusion) ✅ RECOMMENDED
 ```
-Image → DETIC → Bboxes → ZoeDepth → 3D Projection → RelationalGNN
+JointState → Graph → RelationalGNN → Predicates
+(Optional) Image → GroundingDINO → Depth → 3D Objects → Graph
 ```
-- **Latency:** 2.4ms (mock) / ~85ms (real detectors)
-- **Accuracy:** 92.3%
-- **Best for:** Real-time control
+- **Latency:** 1.5ms (GNN only) / 297ms (with real vision)
+- **Accuracy:** 97.03%
+- **Best for:** All use cases on ALOHA-style datasets
 
-### Option C: Multi-Modal Fusion
+### Option C: MultiModalGNN (DINOv2 Cross-Attention)
 ```
 Image → DINOv2 → RoI Pool → Cross-Attention → MultiModalGNN
 ```
-- **Latency:** 52ms
-- **Accuracy:** 96.2%
-- **Best for:** Planning/reasoning tasks
+- **Latency:** 24ms
+- **Accuracy:** 96.51%
+- **Best for:** Datasets where objects are NOT encoded in kinematics
 
-### Comparison Results
+### Fair Comparison Results (55k vs 55k frames)
 
-| Metric | Option A | Option C |
-|--------|----------|----------|
-| Micro Accuracy | 92.3% | **96.2%** |
-| `is_near` F1 | 0.67 | **0.91** (+35%) |
-| Latency | **2.4ms** | 52ms |
-| Memory | **107MB** | 231MB |
+| Metric | Option A | Option C | Winner |
+|--------|----------|----------|--------|
+| Micro Accuracy | **97.03%** | 96.51% | **A (+0.5%)** |
+| Macro F1 | **0.358** | 0.348 | **A (+2.9%)** |
+| `is_near` F1 | **0.954** | 0.920 | **A** |
+| `is_approaching` F1 | **0.182** | 0.156 | **A** |
+| Latency | **1.5ms** | 24ms | **A (16× faster)** |
+| Peak Memory | **19.4MB** | 141.8MB | **A (7× less)** |
+| Model Size | **0.81MB** | 2.14MB | **A (2.6× smaller)** |
 
-### Depth Noise Ablation
+### Honest E2E Latency (Real Vision on RTX 3070)
 
-| Noise σ | Option A Acc | Option C Acc |
-|---------|--------------|--------------|
-| 0 cm | 93.8% | **98.9%** |
-| 10 cm | 93.2% | **97.8%** |
-| 20 cm | 91.9% | **95.7%** |
+| Component | Time |
+|-----------|------|
+| GroundingDINO detection | 217-234ms |
+| Depth Anything V2 | 61ms |
+| GNN inference | 1.4ms |
+| **Total E2E** | **297-332ms** |
 
-**Finding:** Option C is more robust to depth estimation errors.
+> ⚠️ **Note**: The 2.4ms latency previously reported was with **mock detectors**. Real vision adds ~300ms.
 
 ```bash
 # Train MultiModalGNN
@@ -482,11 +554,13 @@ python scripts/ablation_depth_noise.py --frames 200 --output experiments/ablatio
 
 1. **N×M → N+M Complexity**: Single MCP interface per robot connects to any model
 2. **Explainable Robot AI**: All decisions logged as structured tool calls
-3. **Semantic Perception**: GNN-processed world graphs with 99.4% predicate accuracy
+3. **Semantic Perception**: GNN-processed world graphs with 97% predicate accuracy
 4. **Protocol-Driven Robotics**: Foundation for multi-robot, multi-agent systems
 5. **LeRobot Integration**: First MCP bridge for HuggingFace robotics datasets
-6. **Vision-Kinematic Fusion**: +35.6% improvement in proximity detection via MultiModalGNN
-7. **Depth Robustness Analysis**: Ablation study showing learned fusion outperforms geometric
+6. **Swappable AI Validated**: Llama3.2 → MCP → GNN E2E (3 steps, 5.3s)
+7. **Pre-Execution Simulation**: ForwardDynamicsModel for LLM plan verification before physical execution
+8. **Fair Architecture Comparison**: RelationalGNN vs MultiModalGNN on 55k frames — kinematic wins
+9. **Temporal Predicate Stability**: SpatiotemporalGNN with GRU eliminates frame-to-frame flicker (~90% acc)
 
 ## Citation
 

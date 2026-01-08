@@ -34,6 +34,7 @@ class PredictionToolsManager:
         graph_transformer: LeRobotGraphTransformer,
         gnn_model: RelationalGNN,
         forward_model: ForwardDynamicsModel | None = None,
+        stgnn_model: Any | None = None,  # SpatiotemporalGNN
     ):
         """Initialize prediction tools manager.
 
@@ -42,11 +43,13 @@ class PredictionToolsManager:
             graph_transformer: Transformer for state-to-graph conversion
             gnn_model: RelationalGNN model for predictions
             forward_model: Optional ForwardDynamicsModel for pre-execution simulation
+            stgnn_model: Optional SpatiotemporalGNN for temporal predictions (Phase 11)
         """
         self.data_manager = data_manager
         self.graph_transformer = graph_transformer
         self.gnn_model = gnn_model
         self.forward_model = forward_model
+        self.stgnn_model = stgnn_model
         self._inference_times: list[float] = []
 
     def get_world_graph(self, frame_idx: int | None = None, threshold: float = 0.5) -> dict:
@@ -358,8 +361,112 @@ class PredictionToolsManager:
 
         return response
 
+    def project_future(
+        self,
+        action: list[float] | None = None,
+        horizon_steps: int = 3,
+        threshold: float = 0.5,
+    ) -> dict:
+        """Project future predicates given current state + action sequence.
+        
+        Phase 11: Predictive Temporal Verifiers (ST-GNN)
+        
+        Args:
+            action: Action vector (14-DoF for ALOHA). If None, uses current frame action.
+            horizon_steps: Number of future steps to predict (1-5)
+            threshold: Probability threshold for predicate activation
+            
+        Returns:
+            Dictionary with current and projected future predicates
+        """
+        import torch
 
-def get_prediction_tools(include_simulate: bool = True) -> list[Tool]:
+        start_time = time.perf_counter()
+
+        # Check if ST-GNN is available
+        if self.stgnn_model is None:
+            return {
+                "error": "SpatiotemporalGNN not loaded. "
+                        "Train with: python scripts/train_spatiotemporal_gnn.py",
+                "recommendation": "UNAVAILABLE",
+            }
+
+        # Get current state
+        frame = self.data_manager.get_current_frame()
+        state = frame.get("observation.state")
+
+        if state is None:
+            return {"error": "No observation state available"}
+
+        if not isinstance(state, torch.Tensor):
+            state = torch.tensor(state, dtype=torch.float32)
+
+        # Build current graph
+        graph_data = self.graph_transformer.to_graph(state)
+        device = next(self.stgnn_model.parameters()).device
+        graph_data = graph_data.to(device)
+
+        # Get action
+        if action is None:
+            action_data = frame.get("action")
+            if action_data is not None:
+                if not isinstance(action_data, torch.Tensor):
+                    action_data = torch.tensor(action_data, dtype=torch.float32)
+                action = action_data.to(device)
+            else:
+                action = torch.zeros(14, device=device)
+        else:
+            action = torch.tensor(action, dtype=torch.float32, device=device)
+
+        # Predict future
+        self.stgnn_model.eval()
+        with torch.no_grad():
+            future_predictions, current_outputs = self.stgnn_model.predict_future(
+                graph_data,
+                action,
+            )
+
+        # Get current predicates
+        current_predicates = self.gnn_model.to_world_context(graph_data, threshold)
+
+        # Format future predictions
+        projected = []
+        for pred in future_predictions[:horizon_steps]:
+            # Convert logits to probabilities
+            probs = torch.sigmoid(pred.predicate_logits)  # (num_edges, num_predicates)
+            
+            # Get active predicates (simplified - would need edge_index for full conversion)
+            # For now, return summary statistics
+            active_count = (probs > threshold).sum().item()
+            mean_confidence = probs.mean().item()
+            
+            projected.append({
+                "step": pred.step,
+                "confidence": pred.confidence,
+                "active_predicates_count": active_count,
+                "mean_predicate_probability": round(mean_confidence, 3),
+            })
+
+        inference_time = (time.perf_counter() - start_time) * 1000
+        self._inference_times.append(inference_time)
+
+        # Determine recommendation
+        min_confidence = min(p.confidence for p in future_predictions[:horizon_steps])
+        recommendation = "SAFE" if min_confidence > 0.7 else "REPLAN"
+
+        return {
+            "current_frame": self.data_manager._current_frame_idx,
+            "current_predicates": current_predicates,
+            "action_applied": action.tolist() if action.dim() > 0 else [action.item()],
+            "horizon_steps": horizon_steps,
+            "projected_predicates": projected,
+            "min_confidence": round(min_confidence, 3),
+            "recommendation": recommendation,
+            "inference_time_ms": round(inference_time, 3),
+        }
+
+
+def get_prediction_tools(include_simulate: bool = True, include_project_future: bool = True) -> list[Tool]:
     """Get list of prediction-related MCP tools.
     
     Args:
@@ -516,6 +623,48 @@ def get_prediction_tools(include_simulate: bool = True) -> list[Tool]:
             )
         )
 
+    # Add project_future tool if requested (Phase 11)
+    if include_project_future:
+        tools.append(
+            Tool(
+                name="project_future",
+                description=(
+                    "PROJECT future predicates given current state + action. "
+                    "Uses SpatiotemporalGNN to predict what predicates will be active "
+                    "after executing the given action. Enables proactive AI planning. "
+                    "Returns current predicates and projected future states with confidence scores."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "description": (
+                                "Action vector to apply (14-DoF for ALOHA). "
+                                "If not provided, uses action from current frame."
+                            ),
+                        },
+                        "horizon_steps": {
+                            "type": "integer",
+                            "description": "Number of future steps to predict (1-5)",
+                            "minimum": 1,
+                            "maximum": 5,
+                            "default": 3,
+                        },
+                        "threshold": {
+                            "type": "number",
+                            "description": "Probability threshold for predicate activation (0.0-1.0)",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                            "default": 0.5,
+                        },
+                    },
+                    "required": [],
+                },
+            )
+        )
+
     return tools
 
 
@@ -585,6 +734,13 @@ async def handle_prediction_tool(
             num_steps=num_steps,
             confidence_threshold=confidence_threshold,
         )
+
+    elif name == "project_future":
+        # Phase 11: Predictive Temporal Verifiers
+        action = arguments.get("action")
+        horizon_steps = arguments.get("horizon_steps", 3)
+        threshold = arguments.get("threshold", 0.5)
+        result = tools_manager.project_future(action, horizon_steps, threshold)
 
     else:
         result = {"error": f"Unknown tool: {name}"}

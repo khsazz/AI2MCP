@@ -381,6 +381,7 @@ def main():
     if args.model is None:
         # Check common locations
         default_paths = [
+            Path("experiments/remote_training/relational_gnn/best_model.pt"),
             Path("experiments/aloha_training/best_model.pt"),
             Path("experiments/training/best_model.pt"),
         ]

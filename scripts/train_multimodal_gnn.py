@@ -11,9 +11,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import logging
+import os
+import signal
+import sys
 import time
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +30,55 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
+
+# =============================================================================
+# Signal Handling and Memory Monitoring for Debugging
+# =============================================================================
+
+def get_memory_info() -> dict:
+    """Get current memory usage."""
+    import resource
+    rusage = resource.getrusage(resource.RUSAGE_SELF)
+    mem_info = {
+        "rss_gb": rusage.ru_maxrss / 1024 / 1024,  # Max resident set size in GB
+    }
+    try:
+        with open('/proc/self/status', 'r') as f:
+            for line in f:
+                if line.startswith('VmRSS:'):
+                    mem_info["vm_rss_gb"] = int(line.split()[1]) / 1024 / 1024
+                elif line.startswith('VmPeak:'):
+                    mem_info["vm_peak_gb"] = int(line.split()[1]) / 1024 / 1024
+    except:
+        pass
+    return mem_info
+
+def signal_handler(signum, frame):
+    """Handle termination signals."""
+    sig_name = signal.Signals(signum).name
+    mem = get_memory_info()
+    print(f"\n{'='*60}", file=sys.stderr, flush=True)
+    print(f"SIGNAL RECEIVED: {sig_name} (signal {signum})", file=sys.stderr, flush=True)
+    print(f"Memory at signal: {mem}", file=sys.stderr, flush=True)
+    print(f"Stack trace:", file=sys.stderr, flush=True)
+    traceback.print_stack(frame, file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr, flush=True)
+    sys.exit(128 + signum)
+
+def exit_handler():
+    """Called on normal or abnormal exit."""
+    mem = get_memory_info()
+    print(f"\n[EXIT HANDLER] Final memory usage: {mem}", file=sys.stderr, flush=True)
+
+# Register signal handlers
+for sig in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT]:
+    try:
+        signal.signal(sig, signal_handler)
+    except (ValueError, OSError):
+        pass  # Some signals can't be caught
+
+# Register exit handler
+atexit.register(exit_handler)
 
 from gnn_reasoner import (
     DataManager,
@@ -400,7 +454,11 @@ def create_lerobot_data(
     repo_id: str,
     max_frames: int = 5000,
 ) -> list[dict]:
-    """Create training data from LeRobot dataset."""
+    """Create training data from LeRobot dataset.
+    
+    NOTE: Images are NOT stored in memory to avoid OOM.
+    Only graphs and bboxes are stored. This saves ~3.7MB per frame.
+    """
     logger.info(f"Loading dataset: {repo_id}")
     dm = DataManager(repo_id)
     transformer = LeRobotGraphTransformer(ALOHA_KINEMATIC_CHAIN)
@@ -411,8 +469,16 @@ def create_lerobot_data(
     data_list = []
     prev_graph = None
     num_frames = min(len(dm), max_frames)
+    
+    logger.info(f"Starting data processing for {num_frames} frames...")
+    logger.info(f"[MEMORY-OPT] NOT storing images in RAM (saves ~3.7MB/frame = {num_frames * 3.7 / 1024:.1f}GB total)")
 
     for idx in tqdm(range(num_frames), desc="Processing frames"):
+        # Log memory every 5000 frames
+        if idx > 0 and idx % 5000 == 0:
+            mem = get_memory_info()
+            logger.info(f"[MEMORY] Frame {idx}/{num_frames}: {mem}")
+        
         frame = dm.get_frame(idx)
         state = frame.get("observation.state")
 
@@ -422,7 +488,7 @@ def create_lerobot_data(
         if isinstance(state, np.ndarray):
             state = torch.from_numpy(state)
 
-        # Get image if available
+        # Get image for detection (but don't store the tensor)
         image = dm.get_image(idx)
         if image is None:
             image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
@@ -439,16 +505,25 @@ def create_lerobot_data(
         graph = transformer.to_graph_with_objects(state, objects_3d, gripper_state)
         graph = add_predicate_labels(graph, prev_graph)
 
-        # Convert image to tensor
-        image_tensor = torch.from_numpy(image).float().permute(2, 0, 1) / 255.0
-
+        # DON'T store image tensor - saves ~3.7MB per frame!
+        # For training without vision encoder, we only need the graph
         data_list.append({
             "graph": graph,
-            "image": image_tensor,
+            "image": None,  # Don't store image to save memory
             "bboxes": [det.bbox for det in detections],
         })
 
         prev_graph = graph
+        
+        # Explicit garbage collection every 10k frames
+        if idx > 0 and idx % 10000 == 0:
+            import gc
+            gc.collect()
+    
+    # Final memory log
+    mem = get_memory_info()
+    logger.info(f"[MEMORY] Data loading complete. Final: {mem}")
+    logger.info(f"[MEMORY] Stored {len(data_list)} graphs (no images in RAM)")
 
     return data_list
 
@@ -467,12 +542,20 @@ class MultiModalDataset(torch.utils.data.Dataset):
 
 
 def collate_multimodal(batch: list[dict]) -> dict:
-    """Custom collate function for MultiModal data."""
+    """Custom collate function for MultiModal data.
+    
+    Handles None images (memory optimization mode).
+    """
     from torch_geometric.data import Batch
 
     graphs = [item["graph"] for item in batch]
-    images = torch.stack([item["image"] for item in batch])
     bboxes = [item["bboxes"] for item in batch]
+    
+    # Handle None images (memory optimization - images not stored)
+    if batch[0]["image"] is None:
+        images = None
+    else:
+        images = torch.stack([item["image"] for item in batch])
 
     return {
         "graph_batch": Batch.from_data_list(graphs),
@@ -549,7 +632,8 @@ def train(
 
             # Get image and bboxes for first item in batch
             # (simplified - full implementation would handle batch properly)
-            if use_vision:
+            # Note: images may be None in memory-optimization mode
+            if use_vision and batch["images"] is not None:
                 image = batch["images"][0:1].to(device)
                 bboxes = batch["bboxes"][0] if batch["bboxes"] else []
             else:
@@ -588,7 +672,8 @@ def train(
             for batch in val_loader:
                 graph_batch = batch["graph_batch"].to(device)
 
-                if use_vision:
+                # Note: images may be None in memory-optimization mode
+                if use_vision and batch["images"] is not None:
                     image = batch["images"][0:1].to(device)
                     bboxes = batch["bboxes"][0] if batch["bboxes"] else []
                 else:

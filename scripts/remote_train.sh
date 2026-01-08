@@ -34,6 +34,8 @@ MAX_FRAMES="${MAX_FRAMES:-55000}"  # Full ALOHA dataset
 OUTPUT_DIR="${OUTPUT_DIR:-experiments/remote_training}"
 OUTPUT_DIR_A="${OUTPUT_DIR}/relational_gnn"
 OUTPUT_DIR_C="${OUTPUT_DIR}/multimodal_gnn_${MAX_FRAMES}"  # Includes frame count for clarity
+OUTPUT_DIR_FWD="${OUTPUT_DIR}/forward_dynamics"
+OUTPUT_DIR_STGNN="${OUTPUT_DIR}/spatiotemporal_gnn"
 COMPARISON_DIR="${OUTPUT_DIR}/comparison_real"
 
 # Colors
@@ -157,6 +159,166 @@ tmux new-session -d -s ${TMUX_SESSION} bash -c '
         --epochs ${EPOCHS} \
         --output ${OUTPUT_DIR_C} \
         2>&1 | tee ${OUTPUT_DIR_C}/training.log
+    
+    echo ""
+    echo "============================================================"
+    echo "Training Complete!"
+    echo "Time: \$(date)"
+    echo "============================================================"
+    echo "Press any key to exit..."
+    read
+'
+
+echo "Training started in tmux session: ${TMUX_SESSION}"
+echo "To attach: ssh ${REMOTE} -t tmux attach -t ${TMUX_SESSION}"
+REMOTE_SCRIPT
+    
+    log_info "Training started! Use './scripts/remote_train.sh status' to check progress"
+}
+
+# Train ForwardDynamicsModel (Phase 10.3: Pre-Execution Simulation)
+start_forward_training() {
+    FREEZE_FLAG="${FREEZE_ENCODER:-false}"
+    if [ "${FREEZE_FLAG}" = "true" ]; then
+        FREEZE_ARG=""
+        TRAIN_MODE="frozen encoder"
+        OUTPUT_SUFFIX=""
+    else
+        FREEZE_ARG="--no-freeze-encoder"
+        TRAIN_MODE="end-to-end"
+        OUTPUT_SUFFIX="_e2e"
+    fi
+    
+    log_info "Starting ForwardDynamicsModel training (${TRAIN_MODE}) on remote..."
+    log_info "  - Dataset: lerobot/aloha_static_coffee"
+    log_info "  - Frames: ${MAX_FRAMES}"
+    log_info "  - Epochs: ${EPOCHS}"
+    log_info "  - Mode: ${TRAIN_MODE}"
+    log_info "  - Output: ${OUTPUT_DIR_FWD}${OUTPUT_SUFFIX}"
+    
+    ssh "${REMOTE}" bash -l << REMOTE_SCRIPT
+WORK_DIR="/proj/ciptmp/xi58pizy"
+CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+
+# Load modules
+module load cuda/12.0 python3/anaconda-2024.07 tmux
+
+# Kill existing session if any
+tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true
+
+# Start new tmux session with training
+tmux new-session -d -s ${TMUX_SESSION} bash -c '
+    WORK_DIR="/proj/ciptmp/xi58pizy"
+    CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+    
+    module load cuda/12.0 python3/anaconda-2024.07
+    source \$(conda info --base)/etc/profile.d/conda.sh
+    conda activate "\${CONDA_ENVS}/ai2mcp"
+    cd "\${WORK_DIR}/AI2MCP"
+    
+    mkdir -p ${OUTPUT_DIR_FWD}${OUTPUT_SUFFIX}
+    
+    echo "============================================================"
+    echo "ForwardDynamicsModel Training (Phase 10.3)"
+    echo "============================================================"
+    echo "Time: \$(date)"
+    echo "GPU: \$(nvidia-smi --query-gpu=name --format=csv,noheader)"
+    echo "Dataset: lerobot/aloha_static_coffee"
+    echo "Frames: ${MAX_FRAMES}"
+    echo "Epochs: ${EPOCHS}"
+    echo "Mode: ${TRAIN_MODE}"
+    echo "Output: ${OUTPUT_DIR_FWD}${OUTPUT_SUFFIX}"
+    echo "============================================================"
+    echo ""
+    
+    python scripts/train_forward_model.py \
+        --repo lerobot/aloha_static_coffee \
+        --epochs ${EPOCHS} \
+        ${FREEZE_ARG} \
+        --output ${OUTPUT_DIR_FWD}${OUTPUT_SUFFIX} \
+        2>&1 | tee ${OUTPUT_DIR_FWD}${OUTPUT_SUFFIX}/training.log
+    
+    echo ""
+    echo "============================================================"
+    echo "Training Complete!"
+    echo "Time: \$(date)"
+    echo "============================================================"
+    echo "Press any key to exit..."
+    read
+'
+
+echo "Training started in tmux session: ${TMUX_SESSION}"
+echo "To attach: ssh ${REMOTE} -t tmux attach -t ${TMUX_SESSION}"
+REMOTE_SCRIPT
+    
+    log_info "Training started! Use './scripts/remote_train.sh status' to check progress"
+}
+
+# Train SpatiotemporalGNN (Phase 11: Predictive Temporal Verifiers)
+start_stgnn_training() {
+    FREEZE_BASE_FLAG="${FREEZE_BASE:-true}"
+    BASE_CHECKPOINT="${BASE_CHECKPOINT:-experiments/remote_training/relational_gnn/best_model.pt}"
+    
+    if [ "${FREEZE_BASE_FLAG}" = "true" ]; then
+        FREEZE_ARG="--freeze-base"
+        TRAIN_MODE="frozen base GNN"
+    else
+        FREEZE_ARG=""
+        TRAIN_MODE="end-to-end"
+    fi
+    
+    log_info "Starting SpatiotemporalGNN training (Phase 11) on remote..."
+    log_info "  - Dataset: lerobot/aloha_static_coffee"
+    log_info "  - Frames: ${MAX_FRAMES}"
+    log_info "  - Epochs: ${EPOCHS}"
+    log_info "  - Mode: ${TRAIN_MODE}"
+    log_info "  - Base checkpoint: ${BASE_CHECKPOINT}"
+    log_info "  - Output: ${OUTPUT_DIR_STGNN}"
+    
+    ssh "${REMOTE}" bash -l << REMOTE_SCRIPT
+WORK_DIR="/proj/ciptmp/xi58pizy"
+CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+
+# Load modules
+module load cuda/12.0 python3/anaconda-2024.07 tmux
+
+# Kill existing session if any
+tmux kill-session -t ${TMUX_SESSION} 2>/dev/null || true
+
+# Start new tmux session with training
+tmux new-session -d -s ${TMUX_SESSION} bash -c '
+    WORK_DIR="/proj/ciptmp/xi58pizy"
+    CONDA_ENVS="\${WORK_DIR}/.conda/envs"
+    
+    module load cuda/12.0 python3/anaconda-2024.07
+    source \$(conda info --base)/etc/profile.d/conda.sh
+    conda activate "\${CONDA_ENVS}/ai2mcp"
+    cd "\${WORK_DIR}/AI2MCP"
+    
+    mkdir -p ${OUTPUT_DIR_STGNN}
+    
+    echo "============================================================"
+    echo "SpatiotemporalGNN Training (Phase 11)"
+    echo "============================================================"
+    echo "Time: \$(date)"
+    echo "GPU: \$(nvidia-smi --query-gpu=name --format=csv,noheader)"
+    echo "Dataset: lerobot/aloha_static_coffee"
+    echo "Frames: ${MAX_FRAMES}"
+    echo "Epochs: ${EPOCHS}"
+    echo "Mode: ${TRAIN_MODE}"
+    echo "Base checkpoint: ${BASE_CHECKPOINT}"
+    echo "Output: ${OUTPUT_DIR_STGNN}"
+    echo "============================================================"
+    echo ""
+    
+    python scripts/train_spatiotemporal_gnn.py \
+        --repo lerobot/aloha_static_coffee \
+        --max-frames ${MAX_FRAMES} \
+        --epochs ${EPOCHS} \
+        --base-checkpoint ${BASE_CHECKPOINT} \
+        ${FREEZE_ARG} \
+        --output ${OUTPUT_DIR_STGNN} \
+        2>&1 | tee ${OUTPUT_DIR_STGNN}/training.log
     
     echo ""
     echo "============================================================"
@@ -364,25 +526,35 @@ show_help() {
     echo "Usage: $0 <command>"
     echo ""
     echo "Commands:"
-    echo "  sync       - Sync code to remote"
-    echo "  setup      - First-time setup (create conda env, install deps)"
-    echo "  train      - Start MultiModalGNN training in tmux"
-    echo "  train-full - FULL PIPELINE: train both models + real vision benchmark"
-    echo "  status     - Check training progress"
-    echo "  attach     - Attach to training tmux session"
-    echo "  pull       - Pull results back to local"
-    echo "  shell      - Open interactive shell on remote"
-    echo "  all        - Sync + train"
+    echo "  sync        - Sync code to remote"
+    echo "  setup       - First-time setup (create conda env, install deps)"
+    echo "  train       - Start MultiModalGNN training in tmux"
+    echo "  train-fwd   - Start ForwardDynamicsModel training (Phase 10.3)"
+    echo "  train-stgnn - Start SpatiotemporalGNN training (Phase 11)"
+    echo "  train-full  - FULL PIPELINE: train both models + real vision benchmark"
+    echo "  status      - Check training progress"
+    echo "  attach      - Attach to training tmux session"
+    echo "  pull        - Pull results back to local"
+    echo "  shell       - Open interactive shell on remote"
+    echo "  all         - Sync + train"
     echo ""
     echo "Environment variables:"
-    echo "  EPOCHS=100       - Number of training epochs (default: 100)"
-    echo "  MAX_FRAMES=55000 - Number of dataset frames (default: 55000 = full ALOHA)"
-    echo "  OUTPUT_DIR=...   - Output directory on remote"
+    echo "  EPOCHS=100         - Number of training epochs (default: 100)"
+    echo "  MAX_FRAMES=55000   - Number of dataset frames (default: 55000 = full ALOHA)"
+    echo "  FREEZE_ENCODER=true - Freeze GNN encoder (default: false = end-to-end)"
+    echo "  FREEZE_BASE=true   - Freeze base GNN in ST-GNN (default: true)"
+    echo "  BASE_CHECKPOINT=... - Base RelationalGNN checkpoint for ST-GNN"
+    echo "  OUTPUT_DIR=...     - Output directory on remote"
     echo ""
     echo "Examples:"
     echo "  $0 setup                     # First-time setup"
     echo "  $0 sync && $0 train-full     # Sync code and run FULL pipeline (~6-8h)"
+    echo "  $0 sync && $0 train-fwd       # Train ForwardDynamicsModel (end-to-end)"
+    echo "  $0 sync && $0 train-stgnn    # Train SpatiotemporalGNN (Phase 11)"
+    echo "  FREEZE_ENCODER=true $0 train-fwd  # Train with frozen encoder"
+    echo "  FREEZE_BASE=false $0 train-stgnn  # Train ST-GNN end-to-end (no freeze)"
     echo "  EPOCHS=50 $0 train           # Quick multimodal training"
+    echo "  MAX_FRAMES=5000 $0 train-stgnn  # Quick ST-GNN validation (5k frames)"
     echo "  $0 status                    # Check progress"
     echo "  $0 pull                      # Get results"
     echo ""
@@ -390,6 +562,17 @@ show_help() {
     echo "  1. Train RelationalGNN on full ALOHA (55k frames)"
     echo "  2. Train MultiModalGNN on full ALOHA (55k frames)"
     echo "  3. Benchmark with REAL vision (GroundingDINO + ZoeDepth)"
+    echo ""
+    echo "ForwardDynamicsModel (train-fwd):"
+    echo "  Phase 10.3: Pre-Execution Simulation for LLM plan verification"
+    echo "  Default: end-to-end training (learns encoder from scratch)"
+    echo "  Use FREEZE_ENCODER=true to use pre-trained RelationalGNN encoder"
+    echo ""
+    echo "SpatiotemporalGNN (train-stgnn):"
+    echo "  Phase 11: Predictive Temporal Verifiers for predicate stability"
+    echo "  Default: frozen base GNN (uses pre-trained RelationalGNN)"
+    echo "  Use FREEZE_BASE=false to train end-to-end"
+    echo "  Use BASE_CHECKPOINT=... to specify base model path"
 }
 
 # Main
@@ -397,6 +580,8 @@ case "${1:-help}" in
     sync)       sync_code ;;
     setup)      setup_remote ;;
     train)      start_training ;;
+    train-fwd)  start_forward_training ;;
+    train-stgnn) start_stgnn_training ;;
     train-full) start_full_pipeline ;;
     status)     check_status ;;
     attach)     attach_session ;;

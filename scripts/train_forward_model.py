@@ -12,7 +12,7 @@ Usage:
     python scripts/train_forward_model.py --repo lerobot/aloha_static_coffee --epochs 100
 
     # With pre-trained GNN encoder
-    python scripts/train_forward_model.py --gnn-checkpoint experiments/aloha_training/best_model.pt
+    python scripts/train_forward_model.py --gnn-checkpoint experiments/remote_training/relational_gnn/best_model.pt
 """
 
 from __future__ import annotations
@@ -50,6 +50,50 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def detect_gpu_profile() -> dict:
+    """Detect GPU and return appropriate training parameters."""
+    if not torch.cuda.is_available():
+        return {
+            "name": "CPU Fallback",
+            "batch_size": 16,
+            "accumulation_steps": 4,
+            "use_amp": False,
+            "num_workers": 2,
+        }
+
+    # Get GPU memory in GB
+    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    gpu_name = torch.cuda.get_device_name(0)
+
+    if gpu_memory_gb >= 12:
+        # RTX 4080, 4090, A100, etc.
+        return {
+            "name": f"{gpu_name} ({gpu_memory_gb:.1f}GB)",
+            "batch_size": 256,  # Increased for better GPU utilization
+            "accumulation_steps": 1,
+            "use_amp": True,
+            "num_workers": 8,  # Parallel data loading
+        }
+    elif gpu_memory_gb >= 6:
+        # RTX 3070, 3080, etc.
+        return {
+            "name": f"{gpu_name} ({gpu_memory_gb:.1f}GB)",
+            "batch_size": 512,  # Maximum batch size for GPU saturation
+            "accumulation_steps": 1,
+            "use_amp": True,
+            "num_workers": 0,  # Not needed with pre-computed data
+        }
+    else:
+        # RTX 500, 3050, etc.
+        return {
+            "name": f"{gpu_name} ({gpu_memory_gb:.1f}GB)",
+            "batch_size": 32,  # Increased from 16
+            "accumulation_steps": 2,
+            "use_amp": True,
+            "num_workers": 2,  # Some parallel data loading
+        }
+
+
 @dataclass
 class TrainingConfig:
     """Training configuration."""
@@ -74,6 +118,7 @@ class TrainingConfig:
     weight_decay: float = 1e-5
     accumulation_steps: int = 1
     use_amp: bool = True
+    num_workers: int = 0  # DataLoader workers (0=main thread only)
 
     # Loss weights
     delta_weight: float = 1.0
@@ -89,10 +134,46 @@ class TrainingConfig:
     device: str = "auto"
 
 
+def _precompute_single(args):
+    """Worker function for parallel pre-computation."""
+    frame_idx, data_manager, graph_transformer = args
+    
+    # Get current frame
+    current_frame = data_manager.get_frame(frame_idx)
+    current_state = current_frame.get("observation.state")
+    action = current_frame.get("action")
+    
+    # Get next frame
+    next_frame = data_manager.get_frame(frame_idx + 1)
+    next_state = next_frame.get("observation.state")
+    
+    # Convert to tensors
+    if not isinstance(current_state, torch.Tensor):
+        current_state = torch.tensor(current_state, dtype=torch.float32)
+    if not isinstance(action, torch.Tensor):
+        action = torch.tensor(action, dtype=torch.float32)
+    if not isinstance(next_state, torch.Tensor):
+        next_state = torch.tensor(next_state, dtype=torch.float32)
+    
+    # Build graphs
+    current_graph = graph_transformer.to_graph(current_state)
+    next_graph = graph_transformer.to_graph(next_state)
+    
+    # Compute ground truth delta
+    current_positions = current_graph.x[:, 2:5]
+    next_positions = next_graph.x[:, 2:5]
+    delta = next_positions - current_positions
+    
+    return current_graph, action, delta
+
+
 class TransitionDataset(Dataset):
     """Dataset of state transitions for forward dynamics training.
     
     Each sample is a (state_t, action_t, state_{t+1}) tuple.
+    
+    Pre-computes all graphs at initialization using all CPU cores,
+    then optionally pre-loads to GPU for maximum training speed.
     """
 
     def __init__(
@@ -100,49 +181,125 @@ class TransitionDataset(Dataset):
         data_manager: DataManager,
         graph_transformer: LeRobotGraphTransformer,
         indices: list[int],
+        precompute: bool = True,
+        device: torch.device | None = None,
+        num_workers: int = 8,
     ):
-        self.data_manager = data_manager
-        self.graph_transformer = graph_transformer
         self.indices = indices
+        self.precompute = precompute
+        self.device = device
+        
+        if precompute:
+            import multiprocessing as mp
+            from concurrent.futures import ThreadPoolExecutor
+            
+            # Pre-compute everything into RAM for maximum speed
+            logger.info(f"Pre-computing {len(indices)} transitions using {num_workers} workers...")
+            
+            self.cached_graphs = []
+            self.cached_actions = []
+            self.cached_deltas = []
+            
+            # Sequential but with progress (multiprocessing has pickle issues with LeRobot)
+            # Use chunked processing for better progress reporting
+            chunk_size = 1000
+            for chunk_start in range(0, len(indices), chunk_size):
+                chunk_end = min(chunk_start + chunk_size, len(indices))
+                chunk_indices = indices[chunk_start:chunk_end]
+                
+                for frame_idx in chunk_indices:
+                    # Get current frame
+                    current_frame = data_manager.get_frame(frame_idx)
+                    current_state = current_frame.get("observation.state")
+                    action = current_frame.get("action")
+                    
+                    # Get next frame
+                    next_frame = data_manager.get_frame(frame_idx + 1)
+                    next_state = next_frame.get("observation.state")
+                    
+                    # Convert to tensors
+                    if not isinstance(current_state, torch.Tensor):
+                        current_state = torch.tensor(current_state, dtype=torch.float32)
+                    if not isinstance(action, torch.Tensor):
+                        action = torch.tensor(action, dtype=torch.float32)
+                    if not isinstance(next_state, torch.Tensor):
+                        next_state = torch.tensor(next_state, dtype=torch.float32)
+                    
+                    # Build graphs
+                    current_graph = graph_transformer.to_graph(current_state)
+                    next_graph = graph_transformer.to_graph(next_state)
+                    
+                    # Compute ground truth delta
+                    current_positions = current_graph.x[:, 2:5]
+                    next_positions = next_graph.x[:, 2:5]
+                    delta = next_positions - current_positions
+                    
+                    self.cached_graphs.append(current_graph)
+                    self.cached_actions.append(action)
+                    self.cached_deltas.append(delta)
+                
+                logger.info(f"  Pre-computed: {chunk_end}/{len(indices)} ({100*chunk_end/len(indices):.1f}%)")
+            
+            # Stack actions and deltas for faster batching
+            self.cached_actions = torch.stack(self.cached_actions)
+            self.cached_deltas = torch.stack(self.cached_deltas)
+            
+            # Pre-load to GPU if device specified (uses VRAM for speed)
+            if device is not None and device.type == "cuda":
+                logger.info(f"Pre-loading tensors to GPU ({device})...")
+                self.cached_actions = self.cached_actions.to(device)
+                self.cached_deltas = self.cached_deltas.to(device)
+                # Note: graphs stay on CPU, will be batched and moved per-batch
+            
+            logger.info(f"Pre-computation complete! {len(indices)} transitions cached.")
+        else:
+            # Fallback: load on-demand (slower)
+            self.data_manager = data_manager
+            self.graph_transformer = graph_transformer
 
     def __len__(self) -> int:
         return len(self.indices)
 
     def __getitem__(self, idx: int) -> dict:
-        frame_idx = self.indices[idx]
-
-        # Get current frame
-        current_frame = self.data_manager.get_frame(frame_idx)
-        current_state = current_frame.get("observation.state")
-        action = current_frame.get("action")
-
-        # Get next frame
-        next_frame = self.data_manager.get_frame(frame_idx + 1)
-        next_state = next_frame.get("observation.state")
-
-        # Convert to tensors
-        if not isinstance(current_state, torch.Tensor):
-            current_state = torch.tensor(current_state, dtype=torch.float32)
-        if not isinstance(action, torch.Tensor):
-            action = torch.tensor(action, dtype=torch.float32)
-        if not isinstance(next_state, torch.Tensor):
-            next_state = torch.tensor(next_state, dtype=torch.float32)
-
-        # Build graphs
-        current_graph = self.graph_transformer.to_graph(current_state)
-        next_graph = self.graph_transformer.to_graph(next_state)
-
-        # Compute ground truth delta
-        current_positions = current_graph.x[:, 2:5]
-        next_positions = next_graph.x[:, 2:5]
-        delta = next_positions - current_positions
-
-        return {
-            "current_graph": current_graph,
-            "action": action,
-            "target_delta": delta,
-            "frame_idx": frame_idx,
-        }
+        if self.precompute:
+            # Fast path: return pre-computed data
+            return {
+                "current_graph": self.cached_graphs[idx],
+                "action": self.cached_actions[idx],
+                "target_delta": self.cached_deltas[idx],
+                "frame_idx": self.indices[idx],
+            }
+        else:
+            # Slow path: load from disk (fallback)
+            frame_idx = self.indices[idx]
+            
+            current_frame = self.data_manager.get_frame(frame_idx)
+            current_state = current_frame.get("observation.state")
+            action = current_frame.get("action")
+            
+            next_frame = self.data_manager.get_frame(frame_idx + 1)
+            next_state = next_frame.get("observation.state")
+            
+            if not isinstance(current_state, torch.Tensor):
+                current_state = torch.tensor(current_state, dtype=torch.float32)
+            if not isinstance(action, torch.Tensor):
+                action = torch.tensor(action, dtype=torch.float32)
+            if not isinstance(next_state, torch.Tensor):
+                next_state = torch.tensor(next_state, dtype=torch.float32)
+            
+            current_graph = self.graph_transformer.to_graph(current_state)
+            next_graph = self.graph_transformer.to_graph(next_state)
+            
+            current_positions = current_graph.x[:, 2:5]
+            next_positions = next_graph.x[:, 2:5]
+            delta = next_positions - current_positions
+            
+            return {
+                "current_graph": current_graph,
+                "action": action,
+                "target_delta": delta,
+                "frame_idx": frame_idx,
+            }
 
 
 def collate_transitions(batch: list[dict]) -> dict:
@@ -295,6 +452,20 @@ def train(config: TrainingConfig) -> dict:
 
     logger.info(f"Using device: {device}")
 
+    # Detect GPU and adjust batch size if not explicitly set
+    gpu_profile = detect_gpu_profile()
+    logger.info(f"GPU Profile: {gpu_profile['name']}")
+
+    # Use detected batch size unless explicitly overridden via CLI
+    if config.batch_size == 32:  # Default value, use profile
+        config.batch_size = gpu_profile["batch_size"]
+        config.accumulation_steps = gpu_profile["accumulation_steps"]
+        config.use_amp = gpu_profile["use_amp"]
+        config.num_workers = gpu_profile.get("num_workers", 0)
+        logger.info(f"Auto-configured: batch_size={config.batch_size}, "
+                   f"accumulation_steps={config.accumulation_steps}, "
+                   f"num_workers={config.num_workers}")
+
     # Create output directory
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -325,23 +496,33 @@ def train(config: TrainingConfig) -> dict:
         num_joints=16,
     )
 
-    # Create datasets
-    train_dataset = TransitionDataset(data_manager, graph_transformer, train_indices)
-    val_dataset = TransitionDataset(data_manager, graph_transformer, val_indices)
+    # Create datasets with pre-computation (uses RAM + GPU for maximum speed)
+    logger.info("Creating datasets with RAM pre-computation + GPU pre-loading...")
+    train_dataset = TransitionDataset(
+        data_manager, graph_transformer, train_indices, 
+        precompute=True, device=device, num_workers=8
+    )
+    val_dataset = TransitionDataset(
+        data_manager, graph_transformer, val_indices, 
+        precompute=True, device=device, num_workers=8
+    )
 
+    # With pre-computed data on GPU, no pinning needed (already on device)
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
         shuffle=True,
         collate_fn=collate_transitions,
-        num_workers=0,  # Keep 0 for LeRobot compatibility
+        num_workers=0,  # Data is in RAM/GPU, no I/O needed
+        pin_memory=False,  # Data already on GPU, can't pin CUDA tensors
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
         shuffle=False,
         collate_fn=collate_transitions,
-        num_workers=0,
+        num_workers=0,  # Data is in RAM/GPU, no I/O needed
+        pin_memory=False,  # Data already on GPU, can't pin CUDA tensors
     )
 
     # Load GNN encoder if checkpoint provided

@@ -51,19 +51,19 @@
       "micro_accuracy": 0.9703
     },
     "latency_ms": {
-      "mean": 1.51,
+      "mean": 1.52,
       "p50": 1.51,
-      "p95": 1.55,
-      "p99": 1.62
+      "p95": 1.58,
+      "p99": 1.63
     },
     "memory_mb": {
-      "peak": 18.106368,
+      "peak": 19.426304,
       "model_size": 0.8145
     },
     "timing_breakdown_ms": {
-      "detection": 217.15,
-      "depth": 113.42,
-      "graph": 0.08,
+      "detection": 213.52,
+      "depth": 16.65,
+      "graph": 0.09,
       "inference": 1.43
     }
   },
@@ -72,67 +72,67 @@
     "total_samples": 500,
     "accuracy": {
       "per_predicate": {
-        "is_near": 0.5441,
-        "is_above": 0.0299,
-        "is_below": 0.5665,
-        "is_left_of": 0.5543,
-        "is_right_of": 0.449,
-        "is_holding": 0.0186,
-        "is_contacting": 0.8553,
-        "is_approaching": 0.1012,
-        "is_retracting": 0.9792
+        "is_near": 0.9302,
+        "is_above": 0.9717,
+        "is_below": 0.9717,
+        "is_left_of": 0.959,
+        "is_right_of": 0.9593,
+        "is_holding": 1.0,
+        "is_contacting": 0.9691,
+        "is_approaching": 0.9602,
+        "is_retracting": 0.9647
       },
       "precision_per_predicate": {
-        "is_near": 0.125,
-        "is_above": 0.0284,
-        "is_below": 0.003,
-        "is_left_of": 0.0,
-        "is_right_of": 0.4054,
-        "is_holding": 0.0,
-        "is_contacting": 0.1167,
-        "is_approaching": 0.0343,
-        "is_retracting": 0
+        "is_near": 0.9607,
+        "is_above": 0,
+        "is_below": 0,
+        "is_left_of": 0.9573,
+        "is_right_of": 0.9526,
+        "is_holding": 0,
+        "is_contacting": 0,
+        "is_approaching": 0.3581,
+        "is_retracting": 0.147
       },
       "recall_per_predicate": {
-        "is_near": 0.0002,
-        "is_above": 1.0,
-        "is_below": 0.0429,
-        "is_left_of": 0.0,
-        "is_right_of": 0.5196,
+        "is_near": 0.8829,
+        "is_above": 0.0,
+        "is_below": 0.0,
+        "is_left_of": 0.95,
+        "is_right_of": 0.9558,
         "is_holding": 0,
-        "is_contacting": 0.5607,
-        "is_approaching": 0.8606,
-        "is_retracting": 0.0
+        "is_contacting": 0.0,
+        "is_approaching": 0.0998,
+        "is_retracting": 0.145
       },
       "f1_per_predicate": {
-        "is_near": 0.0003,
-        "is_above": 0.0552,
-        "is_below": 0.0056,
-        "is_left_of": 0,
-        "is_right_of": 0.4555,
+        "is_near": 0.9202,
+        "is_above": 0,
+        "is_below": 0,
+        "is_left_of": 0.9536,
+        "is_right_of": 0.9542,
         "is_holding": 0,
-        "is_contacting": 0.1932,
-        "is_approaching": 0.0659,
-        "is_retracting": 0
+        "is_contacting": 0,
+        "is_approaching": 0.1561,
+        "is_retracting": 0.146
       },
-      "macro_f1": 0.0862,
-      "micro_accuracy": 0.4553
+      "macro_f1": 0.3478,
+      "micro_accuracy": 0.9651
     },
     "latency_ms": {
-      "mean": 24.34,
-      "p50": 25.24,
-      "p95": 25.67,
-      "p99": 25.88
+      "mean": 24.29,
+      "p50": 25.18,
+      "p95": 25.61,
+      "p99": 25.78
     },
     "memory_mb": {
-      "peak": 140.52864,
+      "peak": 141.848576,
       "model_size": 2.136484
     },
     "timing_breakdown_ms": {
-      "detection": 217.15,
+      "detection": 213.52,
       "depth": 0,
       "graph": 0.45,
-      "inference": 23.89
+      "inference": 23.84
     }
   },
   "config": {
