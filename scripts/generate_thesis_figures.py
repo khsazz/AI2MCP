@@ -394,6 +394,100 @@ def plot_mcp_architecture(output_dir: Path) -> None:
     plt.close()
 
 
+def plot_predicate_definitions(output_dir: Path) -> None:
+    """Generate visual predicate definitions figure with geometric conditions."""
+    fig, ax = plt.subplots(figsize=(14, 8))
+    ax.axis('off')
+    
+    # Title
+    ax.text(0.5, 0.95, 'Predicate Definitions: Geometric Conditions', 
+            ha='center', fontsize=16, fontweight='bold', transform=ax.transAxes)
+    
+    # Two columns: Spatial (left) and Interaction (right)
+    # Spatial predicates
+    spatial_title = plt.Rectangle((0.02, 0.78), 0.45, 0.08, 
+                                   facecolor=COLORS['primary'], edgecolor='black', linewidth=2)
+    ax.add_patch(spatial_title)
+    ax.text(0.245, 0.82, 'SPATIAL PREDICATES', ha='center', va='center',
+            fontsize=12, fontweight='bold', color='white')
+    
+    spatial_predicates = [
+        ('is_near', 'd(i,j) < 0.2m', 'O---O'),
+        ('is_above', 'dz > 0.1m', 'O (top)'),
+        ('is_below', 'dz < -0.1m', 'O (bottom)'),
+        ('is_left_of', 'dx < -0.05m', '<--O  O'),
+        ('is_right_of', 'dx > 0.05m', 'O  O-->'),
+    ]
+    
+    for i, (name, condition, icon) in enumerate(spatial_predicates):
+        y = 0.68 - i * 0.12
+        # Name box
+        name_box = plt.Rectangle((0.02, y-0.04), 0.15, 0.08, 
+                                  facecolor='#E3F2FD', edgecolor=COLORS['primary'], linewidth=1)
+        ax.add_patch(name_box)
+        ax.text(0.095, y, f'is_{name.split("_")[1]}' if '_' in name else name, 
+                ha='center', va='center', fontsize=10, fontweight='bold', 
+                family='monospace')
+        
+        # Condition
+        ax.text(0.28, y, condition, ha='center', va='center', fontsize=11,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#FFF3E0', edgecolor=COLORS['tertiary']))
+        
+        # Icon/diagram
+        ax.text(0.42, y, icon, ha='center', va='center', fontsize=9, family='monospace')
+    
+    # Interaction predicates
+    interact_title = plt.Rectangle((0.52, 0.78), 0.45, 0.08, 
+                                    facecolor=COLORS['secondary'], edgecolor='black', linewidth=2)
+    ax.add_patch(interact_title)
+    ax.text(0.745, 0.82, 'INTERACTION PREDICATES', ha='center', va='center',
+            fontsize=12, fontweight='bold', color='white')
+    
+    interaction_predicates = [
+        ('is_holding', 'gripper_closed & d<0.05m', '[G]--O'),
+        ('is_contacting', 'd(i,j) < 0.05m', 'O--O'),
+        ('is_approaching', 'v.d < 0 (toward)', 'O-->O'),
+        ('is_retracting', 'v.d > 0 (away)', 'O<--O'),
+    ]
+    
+    for i, (name, condition, icon) in enumerate(interaction_predicates):
+        y = 0.68 - i * 0.12
+        # Name box
+        name_box = plt.Rectangle((0.52, y-0.04), 0.15, 0.08, 
+                                  facecolor='#FCE4EC', edgecolor=COLORS['secondary'], linewidth=1)
+        ax.add_patch(name_box)
+        ax.text(0.595, y, name.replace('is_', ''), 
+                ha='center', va='center', fontsize=10, fontweight='bold',
+                family='monospace')
+        
+        # Condition
+        ax.text(0.78, y, condition, ha='center', va='center', fontsize=10,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#FFF3E0', edgecolor=COLORS['tertiary']))
+        
+        # Icon/diagram
+        ax.text(0.93, y, icon, ha='center', va='center', fontsize=9, family='monospace')
+    
+    # Legend/notes at bottom
+    notes_box = plt.Rectangle((0.1, 0.02), 0.8, 0.12, 
+                               facecolor='#F5F5F5', edgecolor='gray', linewidth=1)
+    ax.add_patch(notes_box)
+    ax.text(0.5, 0.11, 'Notation: d = Euclidean distance, dx/dz = coordinate difference,',
+            ha='center', fontsize=10)
+    ax.text(0.5, 0.05, 'v = velocity vector, O = node (joint), [G] = gripper',
+            ha='center', fontsize=10)
+    
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    
+    plt.tight_layout()
+    
+    output_path = output_dir / 'predicate_definitions.png'
+    plt.savefig(output_path)
+    plt.savefig(output_dir / 'predicate_definitions.pdf')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
 def plot_gnn_dataflow(output_dir: Path) -> None:
     """Generate GNN data flow diagram showing 14-DoF to graph transformation."""
     fig, ax = plt.subplots(figsize=(14, 6))
@@ -693,6 +787,7 @@ def main():
     
     print("\nGenerating additional figures...")
     plot_predicate_distribution(args.output)
+    plot_predicate_definitions(args.output)
     plot_mcp_architecture(args.output)
     plot_gnn_dataflow(args.output)
     plot_comparison_table(args.output)
