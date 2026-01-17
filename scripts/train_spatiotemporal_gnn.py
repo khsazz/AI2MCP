@@ -502,12 +502,12 @@ def train_epoch(
         seq_len = len(graphs_seqs[0])
         
         # Reset hidden state for new batch
-        model.reset_hidden_state()
-        
+            model.reset_hidden_state()
+            
         # Collect all predictions across time steps
         all_predictions = []  # Will be List[Dict] with batched outputs
-        hidden_state = None
-        
+            hidden_state = None
+            
         # Process time steps with BATCHED forward passes
         with torch.amp.autocast('cuda', enabled=profile.use_amp):
             for t in range(seq_len):
@@ -524,8 +524,8 @@ def train_epoch(
                 # Single batched forward pass for all B graphs at timestep t
                 output = model(batched_graph, hidden_state, return_hidden=True)
                 all_predictions.append(output)
-                hidden_state = output.get("hidden_state")
-        
+                    hidden_state = output.get("hidden_state")
+            
         # Compute loss using last prediction
         # Note: batched_graph from last iteration is the last timestep's batch
         with torch.amp.autocast('cuda', enabled=profile.use_amp):
@@ -546,19 +546,19 @@ def train_epoch(
             else:
                 # Fallback: use temporal consistency loss
                 loss = torch.tensor(0.0, device=device, requires_grad=True)
-        
-        # Backward pass
+            
+            # Backward pass
         loss = loss / profile.accumulation_steps
-        scaler.scale(loss).backward()
-        
-        # Optimizer step (with gradient accumulation)
-        if (batch_idx + 1) % profile.accumulation_steps == 0:
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad()
-        
+            scaler.scale(loss).backward()
+            
+            # Optimizer step (with gradient accumulation)
+            if (batch_idx + 1) % profile.accumulation_steps == 0:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+            
         total_loss += loss.item() * profile.accumulation_steps
-        num_batches += 1
+            num_batches += 1
     
     return total_loss / num_batches if num_batches > 0 else 0.0
 
@@ -585,7 +585,7 @@ def evaluate(
             seq_len = len(graphs_seqs[0])
             
             # Reset hidden state
-            model.reset_hidden_state()
+                model.reset_hidden_state()
             hidden_state = None
             
             # Process time steps with batched forward passes
@@ -595,10 +595,10 @@ def evaluate(
                 
                 if batched_graph.x.device != device:
                     batched_graph = batched_graph.to(device)
-                
+                    
                 output = model(batched_graph, hidden_state, return_hidden=True)
-                hidden_state = output.get("hidden_state")
-            
+                    hidden_state = output.get("hidden_state")
+                
             # Get last prediction for loss
             pred_logits = output["predicate_logits"]
             

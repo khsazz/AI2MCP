@@ -394,6 +394,92 @@ def plot_mcp_architecture(output_dir: Path) -> None:
     plt.close()
 
 
+def plot_gnn_dataflow(output_dir: Path) -> None:
+    """Generate GNN data flow diagram showing 14-DoF to graph transformation."""
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.axis('off')
+    
+    # Input: 14-DoF vector
+    input_box = plt.Rectangle((0.02, 0.4), 0.15, 0.25, 
+                               facecolor=COLORS['primary'], edgecolor='black', linewidth=2, alpha=0.8)
+    ax.add_patch(input_box)
+    ax.text(0.095, 0.52, "14-DoF\nState Vector", ha='center', va='center', 
+            fontsize=11, fontweight='bold', color='white')
+    ax.text(0.095, 0.35, "θ₁...θ₇ (left)\nθ₁...θ₇ (right)", ha='center', 
+            fontsize=9, color='gray')
+    
+    # Arrow
+    ax.annotate('', xy=(0.22, 0.52), xytext=(0.17, 0.52),
+                arrowprops=dict(arrowstyle='->', color='black', lw=2))
+    ax.text(0.195, 0.58, "FK", ha='center', fontsize=9, style='italic')
+    
+    # Forward Kinematics
+    fk_box = plt.Rectangle((0.22, 0.4), 0.15, 0.25, 
+                            facecolor=COLORS['secondary'], edgecolor='black', linewidth=2, alpha=0.8)
+    ax.add_patch(fk_box)
+    ax.text(0.295, 0.52, "Forward\nKinematics", ha='center', va='center', 
+            fontsize=11, fontweight='bold', color='white')
+    
+    # Arrow
+    ax.annotate('', xy=(0.42, 0.52), xytext=(0.37, 0.52),
+                arrowprops=dict(arrowstyle='->', color='black', lw=2))
+    
+    # Node Features
+    node_box = plt.Rectangle((0.42, 0.35), 0.2, 0.35, 
+                              facecolor='#E8E8E8', edgecolor='black', linewidth=2)
+    ax.add_patch(node_box)
+    ax.text(0.52, 0.6, "16 Nodes", ha='center', fontsize=11, fontweight='bold')
+    ax.text(0.52, 0.52, "• 7 joints (left)", ha='center', fontsize=9)
+    ax.text(0.52, 0.46, "• 7 joints (right)", ha='center', fontsize=9)
+    ax.text(0.52, 0.40, "• 2 end-effectors", ha='center', fontsize=9)
+    
+    # Arrow
+    ax.annotate('', xy=(0.67, 0.52), xytext=(0.62, 0.52),
+                arrowprops=dict(arrowstyle='->', color='black', lw=2))
+    
+    # Graph Construction
+    graph_box = plt.Rectangle((0.67, 0.35), 0.15, 0.35, 
+                               facecolor=COLORS['tertiary'], edgecolor='black', linewidth=2, alpha=0.8)
+    ax.add_patch(graph_box)
+    ax.text(0.745, 0.58, "Graph", ha='center', va='center', 
+            fontsize=11, fontweight='bold', color='white')
+    ax.text(0.745, 0.48, "G=(V,E)", ha='center', fontsize=10, color='white')
+    ax.text(0.745, 0.40, "~240 edges", ha='center', fontsize=9, color='white')
+    
+    # Arrow
+    ax.annotate('', xy=(0.87, 0.52), xytext=(0.82, 0.52),
+                arrowprops=dict(arrowstyle='->', color='black', lw=2))
+    
+    # GNN Output
+    out_box = plt.Rectangle((0.87, 0.4), 0.11, 0.25, 
+                             facecolor=COLORS['success'], edgecolor='black', linewidth=2, alpha=0.8)
+    ax.add_patch(out_box)
+    ax.text(0.925, 0.52, "9\nPredicates", ha='center', va='center', 
+            fontsize=11, fontweight='bold', color='white')
+    
+    # Node feature detail box (bottom)
+    detail_box = plt.Rectangle((0.25, 0.08), 0.5, 0.18, 
+                                facecolor='#F5F5F5', edgecolor='gray', linewidth=1)
+    ax.add_patch(detail_box)
+    ax.text(0.5, 0.21, "Node Features: xᵢ = [x, y, z, θ, type]", 
+            ha='center', fontsize=10, fontweight='bold')
+    ax.text(0.5, 0.13, "Edge Features: eᵢⱼ = [distance, Δx, Δy, Δz]", 
+            ha='center', fontsize=10)
+    
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 0.85)
+    ax.set_title('RelationalGNN Data Flow: From 14-DoF to Spatial Predicates', 
+                 fontsize=14, fontweight='bold', pad=15)
+    
+    plt.tight_layout()
+    
+    output_path = output_dir / 'gnn_dataflow.png'
+    plt.savefig(output_path)
+    plt.savefig(output_dir / 'gnn_dataflow.pdf')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
 def plot_comparison_table(output_dir: Path) -> None:
     """Generate comparison table as figure."""
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -608,6 +694,7 @@ def main():
     print("\nGenerating additional figures...")
     plot_predicate_distribution(args.output)
     plot_mcp_architecture(args.output)
+    plot_gnn_dataflow(args.output)
     plot_comparison_table(args.output)
     plot_before_after_comparison(args.output)
     
