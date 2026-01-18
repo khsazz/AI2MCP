@@ -1,0 +1,72 @@
+{
+  "config": {
+    "repo_id": "lerobot/aloha_static_coffee",
+    "max_frames": 500,
+    "val_split": 0.1,
+    "sequence_length": 2,
+    "hidden_dim": 128,
+    "action_dim": 14,
+    "num_nodes": 16,
+    "dropout": 0.1,
+    "freeze_encoder": true,
+    "batch_size": 32,
+    "epochs": 5,
+    "learning_rate": 0.001,
+    "weight_decay": 1e-05,
+    "accumulation_steps": 2,
+    "use_amp": true,
+    "num_workers": 2,
+    "delta_weight": 1.0,
+    "uncertainty_weight": 0.1,
+    "feasibility_weight": 0.5,
+    "consistency_weight": 0.1,
+    "output_dir": "experiments/forward_dynamics",
+    "gnn_checkpoint": "experiments/remote_training/relational_gnn/best_model.pt",
+    "device": "auto"
+  },
+  "total_time_seconds": 1.329885482788086,
+  "best_epoch": 5,
+  "best_val_loss": -0.3045276254415512,
+  "final_val_loss": -0.3045276254415512,
+  "final_delta_error": 0.011579942889511585,
+  "final_confidence": 0.22207198292016983,
+  "total_params": 445867,
+  "trainable_params": 242242,
+  "history": {
+    "train_loss": [
+      0.06739504548410574,
+      -0.05879555468757947,
+      -0.1449365014831225,
+      -0.2214323232571284,
+      -0.2542108545700709
+    ],
+    "val_loss": [
+      -0.04167943075299263,
+      -0.12874632328748703,
+      -0.22537803649902344,
+      -0.28691336512565613,
+      -0.3045276254415512
+    ],
+    "val_delta_error": [
+      0.03311699815094471,
+      0.019711642526090145,
+      0.016213906928896904,
+      0.012995642144232988,
+      0.011579942889511585
+    ],
+    "val_confidence": [
+      0.4898074269294739,
+      0.3835446387529373,
+      0.2851845473051071,
+      0.23445815593004227,
+      0.22207198292016983
+    ],
+    "learning_rate": [
+      0.0009046039886902864,
+      0.0006548539886902863,
+      0.0003461460113097138,
+      9.639601130971379e-05,
+      1e-06
+    ]
+  }
+}

@@ -54,7 +54,15 @@ def load_results(results_path: Path) -> dict:
         return json.load(f)
 
 
-def plot_accuracy_comparison(results: dict, output_dir: Path):
+def save_figure(fig, output_dir: Path, name: str, formats: list[str]) -> None:
+    """Save figure in specified formats."""
+    for fmt in formats:
+        path = output_dir / f"{name}.{fmt}"
+        fig.savefig(path)
+        print(f"Saved: {path}")
+
+
+def plot_accuracy_comparison(results: dict, output_dir: Path, formats: list[str]):
     """Create accuracy comparison bar chart."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -97,13 +105,11 @@ def plot_accuracy_comparison(results: dict, output_dir: Path):
                     ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "accuracy_comparison.pdf")
-    plt.savefig(output_dir / "accuracy_comparison.png")
+    save_figure(fig, output_dir, "accuracy_comparison", formats)
     plt.close()
-    print(f"Saved: accuracy_comparison.pdf/png")
 
 
-def plot_latency_breakdown(results: dict, output_dir: Path):
+def plot_latency_breakdown(results: dict, output_dir: Path, formats: list[str]):
     """Create latency breakdown stacked bar chart."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -153,13 +159,11 @@ def plot_latency_breakdown(results: dict, output_dir: Path):
                     ha='center', va='bottom', fontsize=10, fontweight='bold')
 
     plt.tight_layout()
-    plt.savefig(output_dir / "latency_breakdown.pdf")
-    plt.savefig(output_dir / "latency_breakdown.png")
+    save_figure(fig, output_dir, "latency_breakdown", formats)
     plt.close()
-    print(f"Saved: latency_breakdown.pdf/png")
 
 
-def plot_per_predicate_f1(results: dict, output_dir: Path):
+def plot_per_predicate_f1(results: dict, output_dir: Path, formats: list[str]):
     """Create per-predicate F1 comparison chart."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -181,13 +185,11 @@ def plot_per_predicate_f1(results: dict, output_dir: Path):
     ax.set_ylim(0, 1.0)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "per_predicate_f1.pdf")
-    plt.savefig(output_dir / "per_predicate_f1.png")
+    save_figure(fig, output_dir, "per_predicate_f1", formats)
     plt.close()
-    print(f"Saved: per_predicate_f1.pdf/png")
 
 
-def plot_memory_comparison(results: dict, output_dir: Path):
+def plot_memory_comparison(results: dict, output_dir: Path, formats: list[str]):
     """Create memory usage comparison chart."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -223,13 +225,11 @@ def plot_memory_comparison(results: dict, output_dir: Path):
                         ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "memory_comparison.pdf")
-    plt.savefig(output_dir / "memory_comparison.png")
+    save_figure(fig, output_dir, "memory_comparison", formats)
     plt.close()
-    print(f"Saved: memory_comparison.pdf/png")
 
 
-def plot_radar_chart(results: dict, output_dir: Path):
+def plot_radar_chart(results: dict, output_dir: Path, formats: list[str]):
     """Create radar chart comparing overall performance."""
     categories = [
         "Accuracy",
@@ -296,13 +296,11 @@ def plot_radar_chart(results: dict, output_dir: Path):
     ax.set_title("Overall Performance Comparison", y=1.08)
 
     plt.tight_layout()
-    plt.savefig(output_dir / "radar_comparison.pdf")
-    plt.savefig(output_dir / "radar_comparison.png")
+    save_figure(fig, output_dir, "radar_comparison", formats)
     plt.close()
-    print(f"Saved: radar_comparison.pdf/png")
 
 
-def plot_latency_distribution(results: dict, output_dir: Path):
+def plot_latency_distribution(results: dict, output_dir: Path, formats: list[str]):
     """Create latency percentile comparison."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -333,10 +331,8 @@ def plot_latency_distribution(results: dict, output_dir: Path):
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig(output_dir / "latency_distribution.pdf")
-    plt.savefig(output_dir / "latency_distribution.png")
+    save_figure(fig, output_dir, "latency_distribution", formats)
     plt.close()
-    print(f"Saved: latency_distribution.pdf/png")
 
 
 def generate_latex_table(results: dict, output_dir: Path):
@@ -385,25 +381,40 @@ Peak Usage & %.2f & %.2f \\
     print(f"Saved: comparison_table.tex")
 
 
+def parse_formats(format_arg: str) -> list[str]:
+    """Parse format argument into list of formats."""
+    if format_arg == "both":
+        return ["png", "pdf"]
+    return [format_arg]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate comparison figures")
     parser.add_argument(
         "--results",
         type=str,
-        default="experiments/comparison/comparison_results.json",
+        default="experiments/comparison_final_real/comparison_results.json",
         help="Path to comparison results JSON",
     )
     parser.add_argument(
         "--output",
         type=str,
-        default="figures/comparison",
+        default="figures",
         help="Output directory for figures",
+    )
+    parser.add_argument(
+        "--format", "-f",
+        type=str,
+        choices=["png", "pdf", "both"],
+        default="png",
+        help="Output format: png (default), pdf, or both",
     )
     args = parser.parse_args()
 
     results_path = Path(args.results)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
+    formats = parse_formats(args.format)
 
     if not results_path.exists():
         print(f"Results file not found: {results_path}")
@@ -412,14 +423,15 @@ def main():
 
     results = load_results(results_path)
     print(f"Loaded results from {results_path}")
+    print(f"Output format(s): {', '.join(formats)}")
 
     # Generate all figures
-    plot_accuracy_comparison(results, output_dir)
-    plot_latency_breakdown(results, output_dir)
-    plot_per_predicate_f1(results, output_dir)
-    plot_memory_comparison(results, output_dir)
-    plot_radar_chart(results, output_dir)
-    plot_latency_distribution(results, output_dir)
+    plot_accuracy_comparison(results, output_dir, formats)
+    plot_latency_breakdown(results, output_dir, formats)
+    plot_per_predicate_f1(results, output_dir, formats)
+    plot_memory_comparison(results, output_dir, formats)
+    plot_radar_chart(results, output_dir, formats)
+    plot_latency_distribution(results, output_dir, formats)
     generate_latex_table(results, output_dir)
 
     print(f"\nAll figures saved to {output_dir}/")

@@ -41,7 +41,15 @@ COLORS = {
 }
 
 
-def plot_training_speedup(output_dir: Path):
+def save_figure(fig, output_dir: Path, name: str, formats: list[str]) -> None:
+    """Save figure in specified formats."""
+    for fmt in formats:
+        path = output_dir / f"{name}.{fmt}"
+        fig.savefig(path)
+        print(f"Saved: {path}")
+
+
+def plot_training_speedup(output_dir: Path, formats: list[str]):
     """Create training speedup comparison bar chart."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
@@ -98,14 +106,11 @@ def plot_training_speedup(output_dir: Path):
                  ha='center')
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"forward_dynamics_speedup.{fmt}")
+    save_figure(fig, output_dir, "forward_dynamics_speedup", formats)
     plt.close(fig)
-    print(f"Saved: forward_dynamics_speedup.pdf/png")
 
 
-def plot_training_history(output_dir: Path):
+def plot_training_history(output_dir: Path, formats: list[str]):
     """Plot training history from JSON."""
     history_path = Path("experiments/remote_training/forward_dynamics_e2e/training_history.json")
     
@@ -157,14 +162,11 @@ def plot_training_history(output_dir: Path):
                  bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="gray"))
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"forward_dynamics_training.{fmt}")
+    save_figure(fig, output_dir, "forward_dynamics_training", formats)
     plt.close(fig)
-    print(f"Saved: forward_dynamics_training.pdf/png")
 
 
-def plot_mcp_tool_results(output_dir: Path):
+def plot_mcp_tool_results(output_dir: Path, formats: list[str]):
     """Create MCP tool validation results figure."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
@@ -201,14 +203,11 @@ def plot_mcp_tool_results(output_dir: Path):
     ax2.legend(loc="upper right")
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"forward_dynamics_validation.{fmt}")
+    save_figure(fig, output_dir, "forward_dynamics_validation", formats)
     plt.close(fig)
-    print(f"Saved: forward_dynamics_validation.pdf/png")
 
 
-def plot_delta_error_convergence(output_dir: Path):
+def plot_delta_error_convergence(output_dir: Path, formats: list[str]):
     """Plot delta error convergence over training epochs."""
     history_path = Path("experiments/remote_training/forward_dynamics_e2e/training_history.json")
     
@@ -283,14 +282,11 @@ def plot_delta_error_convergence(output_dir: Path):
              ha="center", fontsize=10, style="italic")
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"forward_dynamics_delta_error.{fmt}")
+    save_figure(fig, output_dir, "forward_dynamics_delta_error", formats)
     plt.close(fig)
-    print(f"Saved: forward_dynamics_delta_error.pdf/png")
 
 
-def plot_mental_rollout(output_dir: Path):
+def plot_mental_rollout(output_dir: Path, formats: list[str]):
     """Visualize the 'mental rollout' concept for pre-execution simulation."""
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.axis("off")
@@ -338,40 +334,51 @@ def plot_mental_rollout(output_dir: Path):
                  fontsize=14, fontweight="bold", pad=20)
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"forward_dynamics_mental_rollout.{fmt}")
+    save_figure(fig, output_dir, "forward_dynamics_mental_rollout", formats)
     plt.close(fig)
-    print(f"Saved: forward_dynamics_mental_rollout.pdf/png")
+
+
+def parse_formats(format_arg: str) -> list[str]:
+    """Parse format argument into list of formats."""
+    if format_arg == "both":
+        return ["png", "pdf"]
+    return [format_arg]
 
 
 def main():
-    output_dir = Path("thesis/figures")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    import argparse
     
-    # Also save to main figures folder
-    main_figures = Path("figures")
-    main_figures.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description="Generate ForwardDynamicsModel figures")
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default="figures",
+        help="Output directory for figures",
+    )
+    parser.add_argument(
+        "--format", "-f",
+        type=str,
+        choices=["png", "pdf", "both"],
+        default="png",
+        help="Output format: png (default), pdf, or both",
+    )
+    args = parser.parse_args()
+    
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    formats = parse_formats(args.format)
     
     print("=" * 60)
     print("Generating ForwardDynamicsModel Figures")
+    print(f"Output: {output_dir}")
+    print(f"Format(s): {', '.join(formats)}")
     print("=" * 60)
     
-    plot_training_speedup(output_dir)
-    plot_training_history(output_dir)
-    plot_mcp_tool_results(output_dir)
-    plot_delta_error_convergence(output_dir)
-    plot_mental_rollout(output_dir)
-    
-    # Copy key figures to main figures folder
-    import shutil
-    for name in ["forward_dynamics_speedup", "forward_dynamics_training", 
-                 "forward_dynamics_delta_error", "forward_dynamics_mental_rollout"]:
-        for fmt in ["pdf", "png"]:
-            src = output_dir / f"{name}.{fmt}"
-            if src.exists():
-                shutil.copy(src, main_figures / f"{name}.{fmt}")
-    print(f"Also copied to: {main_figures}")
+    plot_training_speedup(output_dir, formats)
+    plot_training_history(output_dir, formats)
+    plot_mcp_tool_results(output_dir, formats)
+    plot_delta_error_convergence(output_dir, formats)
+    plot_mental_rollout(output_dir, formats)
     
     print("\n" + "=" * 60)
     print(f"All figures saved to: {output_dir}")

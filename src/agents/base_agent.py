@@ -407,9 +407,9 @@ class BaseAgent(ABC):
                         "num_nodes": ctx.get("num_nodes", 0),
                         "num_edges": ctx.get("num_edges", 0),
                     }
-                    # Extract predicates
-                    spatial = result.get("spatial_predicates", [])
-                    interaction = result.get("interaction_predicates", [])
+                    # Extract predicates from world_context (not top-level)
+                    spatial = ctx.get("spatial_predicates", [])
+                    interaction = ctx.get("interaction_predicates", [])
                     observation["predicates"] = {
                         "spatial_count": len(spatial),
                         "interaction_count": len(interaction),
@@ -443,6 +443,14 @@ class BaseAgent(ABC):
             "arguments": tool_call.arguments,
             "result": result.content,
         }
+        
+        # Debug log the stored result
+        logger.debug(
+            "Stored action result",
+            tool=tool_call.name,
+            has_world_context="world_context" in (result.content or {}),
+            content_keys=list((result.content or {}).keys()) if isinstance(result.content, dict) else "not_dict",
+        )
 
         return result
 

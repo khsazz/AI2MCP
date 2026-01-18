@@ -133,6 +133,7 @@ class MCPRos2Server:
             # Try auto-detect if no model specified
             if not model_loaded:
                 auto_paths = [
+                    Path("experiments/remote_training/relational_gnn/best_model.pt"),
                     Path("experiments/aloha_training/best_model.pt"),
                     Path("experiments/training/best_model.pt"),
                 ]
@@ -150,12 +151,51 @@ class MCPRos2Server:
             if not model_loaded:
                 logger.info("Using untrained GNN model (random weights)")
 
+            # Try to load ForwardDynamicsModel for pre-execution simulation (Phase 10.3)
+            forward_model = None
+            forward_model_paths = [
+                # Full training on RTX 3070 (55k frames, delta_error=0.0017)
+                Path("experiments/remote_training/forward_dynamics_e2e/best_model.pt"),
+                # Local minimal training (fallback)
+                Path("experiments/forward_dynamics/best_model.pt"),
+                Path("experiments/forward_dynamics/final_model.pt"),
+            ]
+            for forward_path in forward_model_paths:
+                if forward_path.exists():
+                    from gnn_reasoner.model.forward_dynamics import ForwardDynamicsModel
+                    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                    fwd_checkpoint = torch.load(forward_path, map_location=device, weights_only=False)
+                    
+                    # Check if saved with external GNN encoder
+                    state_dict = fwd_checkpoint["model_state_dict"]
+                    has_external_gnn = any("gnn_encoder.convs" in k for k in state_dict.keys())
+                    
+                    if has_external_gnn:
+                        # Recreate with same GNN encoder architecture
+                        forward_model = ForwardDynamicsModel(gnn_encoder=gnn_model, freeze_encoder=True)
+                    else:
+                        forward_model = ForwardDynamicsModel()
+                    
+                    forward_model.load_state_dict(state_dict)
+                    forward_model = forward_model.to(device)
+                    forward_model.eval()
+                    logger.info(
+                        "Loaded ForwardDynamicsModel",
+                        path=str(forward_path),
+                        epoch=fwd_checkpoint.get("epoch", "unknown"),
+                        has_external_gnn=has_external_gnn,
+                    )
+                    break
+            
+            if forward_model is None:
+                logger.info("ForwardDynamicsModel not found (simulate_action unavailable)")
+
             # Create managers (registration happens in initialize())
             self._lerobot_resource_manager = LeRobotResourceManager(
                 data_manager, graph_transformer, gnn_model
             )
             self._lerobot_tools_manager = PredictionToolsManager(
-                data_manager, graph_transformer, gnn_model
+                data_manager, graph_transformer, gnn_model, forward_model=forward_model
             )
 
             logger.info("LeRobot components initialized successfully")

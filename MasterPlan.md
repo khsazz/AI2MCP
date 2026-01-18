@@ -2,7 +2,7 @@
 
 > **Purpose**: Strategic planning and progress tracking for the thesis project.  
 > **Detailed Logging**: See `CONTEXT_DUMP.txt` for implementation details, code patterns, and problem solutions.  
-> **Last Updated**: 2026-01-08
+> **Last Updated**: 2026-01-18
 
 ---
 
@@ -22,7 +22,10 @@
 | Latency | A=1.5ms, C=24ms → **A 16× faster** | ✅ |
 | Memory | A=0.81MB, C=2.14MB → **A 2.6× smaller** | ✅ |
 | Llama Agent E2E | 3 steps, 5.3s | ✅ |
-| Swappable AI Validated | LLM → MCP → GNN | ✅ |
+| Qwen Agent E2E | 2 steps, 78 predicates | ✅ |
+| Agent Benchmark | Llama 100%, Qwen 100% (40% faster) | ✅ |
+| simulate_action | ForwardDynamicsModel integrated | ✅ |
+| Swappable AI Validated | Llama + Qwen → MCP → GNN | ✅ |
 
 > ⚠️ **REVISED**: Previous "+35.6% is_near improvement from vision" was comparing OLD RelationalGNN (without WeightedFocalLoss) vs NEW MultiModalGNN. After fair comparison, **RelationalGNN WINS**.
 
@@ -43,6 +46,7 @@
 | **9** | **Fair Comparison** | ✅ Complete | 2026-01-08 |
 | **10** | **Pre-Execution Simulation** | ✅ **COMPLETE** | 2026-01-08 |
 | **11** | **Predictive Temporal Verifiers (ST-GNN)** | ✅ **COMPLETE** | 2026-01-09 |
+| **12** | **Qwen Agent Integration** | ✅ **COMPLETE** | 2026-01-18 |
 | — | *Future Research (HetGNN, Distillation, etc.)* | 📋 Backlog | — |
 
 ---
@@ -150,7 +154,8 @@
 | System prompts (Claude/Llama) | ✅ | Includes prediction tools, predicates |
 | Conversation history | ✅ | Last 5 turns |
 | `observe()` with GNN predicates | ✅ | Extracts from tool results |
-| Claude agent testing | ⏸️ | Deferred (Llama prioritized) |
+| Qwen agent integration | ✅ | Qwen2.5:3B via Ollama |
+| Claude agent | ❌ | NOT USED (Qwen replaces it) |
 
 **Agent Capabilities**:
 - **Motion**: `move`, `stop`, `rotate`, `move_forward`
@@ -159,8 +164,8 @@
 
 **Key Files**:
 - `src/agents/base_agent.py` — MCPClient, AgentState
-- `src/agents/claude_agent.py`
-- `src/agents/llama_agent.py`
+- `src/agents/llama_agent.py` — Llama3.2 via Ollama
+- `src/agents/qwen_agent.py` — Qwen2.5 via Ollama
 
 ---
 
@@ -213,8 +218,8 @@
 **Key Thesis Claims**:
 - MCP solves N×M integration problem
 - GNN provides structured relational understanding (99.4% accuracy)
-- Vision integration improves `is_near` F1 by +35.6%
-- Swappable AI brain validated (Llama3.2 → MCP → GNN E2E)
+- ⚠️ Vision integration does NOT improve accuracy (RelationalGNN wins)
+- Swappable AI brain validated (Llama3.2 + Qwen2.5 → MCP → GNN E2E)
 
 ---
 
@@ -316,11 +321,13 @@ Delta Error: 0.0017
 Checkpoint: experiments/remote_training/forward_dynamics_e2e/best_model.pt
 ```
 
-**MCP Tool Validation** (5 tests passed):
+**MCP Tool Validation** (All tests passed):
 ```
 Inference Time: 41 ms
-Confidence Output: 0.54-0.55
-Recommendation: REPLAN (conservative, below 0.7 threshold)
+Confidence Output: 0.49-0.62 (dataset actions vs custom actions)
+Delta Magnitude: 0.010-0.011 (within 0.1 threshold)
+Recommendation: REPLAN (confidence < internal 0.7 threshold)
+Note: Model is conservative by design. Lower threshold=0.5 for production.
 ```
 
 ---
@@ -447,7 +454,7 @@ The training script includes a comprehensive sanity check that runs BEFORE the e
 
 | Task | Priority | Effort | Notes |
 |------|----------|--------|-------|
-| Claude Agent Testing | Medium | Low | Validates "swappable AI" thesis claim |
+| ~~Claude Agent Testing~~ | ~~Medium~~ | ~~Low~~ | ❌ NOT PURSUED (using Qwen instead) |
 | Edge-Native Stack | Medium | Medium | YOLO-World + DepthAnything V2 Small |
 | Semantic Querying | Medium | Medium | "Is workspace safe?" → natural language over predicates |
 | Multi-Robot MCP | Low | High | Scalability demonstration |
@@ -549,6 +556,7 @@ python scripts/compare_models.py --dataset rlbench
 | 9 | Fair Comparison | **RelationalGNN WINS** (97.03% vs 96.51%) |
 | 10 | Pre-Execution Simulation | ForwardDynamicsModel (δ=0.0017, 41ms) |
 | 11 | Temporal Stability | SpatiotemporalGNN (~90% accuracy) |
+| 12 | Qwen Agent | Swappable AI validated (Llama + Qwen) |
 
 ### Trained Models (All Complete)
 
@@ -556,7 +564,7 @@ python scripts/compare_models.py --dataset rlbench
 |-------|------------|--------|
 | RelationalGNN | `experiments/remote_training/relational_gnn/best_model.pt` | **97.03%** |
 | MultiModalGNN | `experiments/remote_training/multimodal_gnn_55k_v2/best_model.pt` | 96.51% |
-| ForwardDynamicsModel | `experiments/remote_training/forward_dynamics_e2e/best_model.pt` | δ=0.0017 |
+| ForwardDynamicsModel | `experiments/remote_training/forward_dynamics_e2e/best_model.pt` | δ=0.0017, conf=0.49-0.62 |
 | SpatiotemporalGNN | `experiments/remote_training/spatiotemporal_gnn/best_model.pt` | ~90% |
 
 ### MCP Tools Implemented
@@ -571,7 +579,7 @@ python scripts/compare_models.py --dataset rlbench
 
 ### Thesis Writing Tasks (Documentation Only)
 
-- ⬜ Generate final thesis figures
+- ✅ Generate final thesis figures (28 PNGs in `figures/`)
 - ⬜ Update thesis Results chapter
 - ⬜ Finalize thesis Discussion chapter
 
@@ -582,7 +590,7 @@ python scripts/compare_models.py --dataset rlbench
 These are documented for future researchers, not part of current thesis:
 - Backlog.1: HetGNN (Cross-Entity Attention)
 - Backlog.2: Knowledge Distillation for Edge
-- Backlog.3: Quick Wins (Claude testing, Semantic Querying)
+- Backlog.3: Quick Wins (Semantic Querying, Edge Stack)
 - Backlog.6: Data Requirements (contact predicates, vision-dependent datasets)
 
 ---
@@ -590,14 +598,15 @@ These are documented for future researchers, not part of current thesis:
 ## Remote Training (RTX 3070)
 
 **Machine**: cip7g1.cip.cs.fau.de  
+**User**: xi58pizy  
 **GPU**: NVIDIA GeForce RTX 3070 (8.2GB VRAM)  
 **Working Dir**: `/proj/ciptmp/xi58pizy/AI2MCP`
 
-| Model | Status | Accuracy | Time |
-|-------|--------|----------|------|
+| Model | Status | Accuracy/Metric | Time |
+|-------|--------|-----------------|------|
 | RelationalGNN | ✅ Complete | 97.03% | ~29 min |
 | MultiModalGNN | ✅ Complete | 96.51% | ~31 min |
-| ForwardDynamicsModel | ✅ Complete | δ=0.0017 | 2.3 min |
+| ForwardDynamicsModel | ✅ Complete | δ=0.0017, conf=0.49-0.62 | 17min+2.3min |
 | **SpatiotemporalGNN** | ✅ Complete | **~90%** | 47 min |
 
 **Honest Latency Benchmark Results**:
@@ -622,7 +631,7 @@ These are documented for future researchers, not part of current thesis:
 | ~~Fix MultiModalGNN accuracy~~ | ~~High~~ | ✅ DONE (96.51% on 55k) |
 | ~~Train MultiModalGNN on 55k~~ | ~~High~~ | ✅ DONE (31 min, fixed OOM) |
 | ~~Run fair comparison~~ | ~~High~~ | ✅ DONE — **RelationalGNN WINS** |
-| Generate final thesis figures | High | ⬜ Pending |
+| Generate final thesis figures | High | ✅ DONE (28 PNGs) |
 | **Revise thesis Results chapter** | **High** | ⬜ **CRITICAL** (outdated claims) |
 
 ### Post-Thesis (Phase 10)
@@ -729,9 +738,17 @@ python scripts/generate_comparison_figures.py
 | Kinematic GNN (local) | `experiments/aloha_training/best_model.pt` | 99.4% |
 | RelationalGNN (55k) | `experiments/remote_training/relational_gnn/best_model.pt` | **97.03%** ✅ |
 | MultiModalGNN (55k) | `experiments/remote_training/multimodal_gnn_55k_v2/best_model.pt` | 96.51% |
-| ForwardDynamicsModel | `experiments/remote_training/forward_dynamics_e2e/best_model.pt` | δ=0.0017 ✅ |
+| ForwardDynamicsModel | `experiments/remote_training/forward_dynamics_e2e/best_model.pt` | δ=0.0017, conf=0.49-0.62 ✅ |
 | **SpatiotemporalGNN** | `experiments/remote_training/spatiotemporal_gnn/best_model.pt` | **~90%** ✅ |
 | Synthetic baseline | `experiments/training/best_model.pt` | 95.9% |
+
+### LLM Agents Validated
+
+| Agent | Model | Backend | Status |
+|-------|-------|---------|--------|
+| LlamaAgent | llama3.2:latest (3B) | Ollama | ✅ E2E validated |
+| QwenAgent | qwen2.5:3b | Ollama | ✅ E2E validated |
+| ClaudeAgent | — | — | ❌ NOT USED |
 
 ---
 

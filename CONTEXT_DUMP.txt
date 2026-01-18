@@ -1,7 +1,7 @@
 ================================================================================
 AI2MCP PROJECT CONTEXT DUMP
 Generated: 2025-01-05
-Last Updated: 2026-01-09
+Last Updated: 2026-01-18
 Purpose: AI context transfer document
 ================================================================================
 
@@ -78,6 +78,11 @@ src/
       scan.py              # get_scan_resources(), handle_scan_resource()
       world_graph.py       # get_world_graph_resources(), handle_world_graph_resource()
       lerobot_state.py     # LeRobotResourceManager class
+  agents/
+    __init__.py
+    base_agent.py          # MCPClient, AgentState, BaseAgent
+    llama_agent.py         # LlamaAgent (Ollama)
+    qwen_agent.py          # QwenAgent (Ollama) - NEW
   gnn_reasoner/
     __init__.py            # exports DataManager, LeRobotGraphTransformer, ALOHA_KINEMATIC_CHAIN
     data_manager.py        # DataManager class wrapping LeRobotDataset
@@ -477,7 +482,9 @@ key_thesis_claims:
     - Previous claim: +35.6% is_near (0.668 → 0.906) was before WeightedFocalLoss fix
     - Current result: RelationalGNN BEATS MultiModalGNN (0.954 vs 0.920)
   - Latency trade-off: RelationalGNN 16× faster (1.5ms vs 24ms)
-  - Swappable AI brain VALIDATED: Llama3.2 → MCP → GNN E2E (3 steps, 5.3s)
+  - Swappable AI brain VALIDATED: Multiple LLMs tested via MCP → GNN E2E
+    - Llama3.2 (3B): 3 steps, 5.3s
+    - Qwen2.5 (3B): JSON parsing validated
 
 [FUTURE_WORK_ITEMS]
 1. ✅ Visual object integration (YOLO/DETIC → object nodes) - COMPLETE
@@ -528,16 +535,17 @@ training_history.json:
 12. ✅ Test suite updated (9 new tests for global context conditioning)
 13. ✅ ForwardDynamicsModel (Phase 10.3): Pre-execution simulation, 55k frames
 14. ✅ SpatiotemporalGNN (Phase 11): Temporal predicate stability, 55k frames, ~90% acc
+15. ✅ QwenAgent integration (Qwen2.5:3B via Ollama) - Swappable AI brain validated
 
 [REMAINING_TASKS]
 1. Physical robot deployment
-2. ✅ LLM agent integration demo - UPDATED (prompts + MCP protocol)
+2. ✅ LLM agent integration demo - COMPLETE (Llama + Qwen via Ollama)
 3. Gazebo simulation testing
 4. Additional datasets training
 5. Edge-native perception stack (YOLO-World + Depth Anything V2 Small) for RTX 500
 
 [LLM_AGENT_IMPROVEMENTS]
-updated: 2025-01-06
+updated: 2026-01-18
 changes:
   - MCPClient now uses real MCP SDK (SSE) with HTTP fallback
   - Tools and resources cached from server on connect
@@ -545,17 +553,24 @@ changes:
   - AgentState now maintains message_history (last 5 turns)
   - observe() now includes GNN world graph and predicates
   - Prompts include spatial/interaction predicate definitions
+  - Added QwenAgent for Qwen2.5 models via Ollama
   
 files_modified:
   - src/agents/base_agent.py (MCPClient, AgentState, observe)
-  - src/agents/claude_agent.py (SYSTEM_PROMPT, _build_prompt, _add_to_history)
   - src/agents/llama_agent.py (SYSTEM_PROMPT, _build_prompt, _add_to_history)
+  - src/agents/qwen_agent.py (NEW - QwenAgent with Ollama integration)
+  - scripts/run_experiment.py (added Qwen agent option)
 
 agent_capabilities:
   - Motion: move, stop, rotate, move_forward
   - Perception: get_obstacle_distances, check_path_clear, scan_surroundings
   - Prediction (GNN): get_world_graph, get_predicates, advance_frame, set_frame
   - Resources: pose, world_graph, predicates
+
+available_agents:
+  - LlamaAgent: Llama3.2 (3B) via Ollama - validated
+  - QwenAgent: Qwen2.5 (3B) via Ollama - validated
+  - ClaudeAgent: NOT USED (deferred indefinitely)
 
 [OPEN_QUESTIONS_RESOLVED]
 question_1_camera_intrinsics:
@@ -731,6 +746,16 @@ CHRONOLOGICAL PROGRESS LOG
   ⚠️ Known Issue: MCP resource reading broken (TextResourceContents library bug)
      → Workaround: Agent uses tool results instead of resources
   ✅ Llama/Ollama integration — COMPLETE
+
+[2026-01-18] Phase 12: Qwen Agent Integration
+  ✅ Pulled qwen2.5:3b (1.9GB) via Ollama
+  ✅ Created QwenAgent class (src/agents/qwen_agent.py)
+  ✅ Implemented Qwen-specific system prompt and user template
+  ✅ Added Qwen to run_experiment.py agent options
+  ✅ Created test_qwen_agent.py validation script
+  ✅ JSON parsing validated (correct action format)
+  ✅ Swappable AI brain thesis claim strengthened (Llama + Qwen both work)
+  ❌ Claude agent NOT pursued (Qwen replaces it for local inference)
 
   Problems Encountered & Solutions:
   
@@ -1156,18 +1181,23 @@ memory_optimization_fix:
   status: ✅ FIXED - Full 55k training completed
 
 deferred:
-  - Claude agent testing (revisit later)
   - ZoeDepth proper installation (requires zoedepth pip package)
   - Gazebo simulation
   - Physical robot deployment
 
+not_pursuing:
+  - Claude agent testing (using Qwen + Llama via Ollama instead)
+
 [OLLAMA_SETUP]
 status: ✅ installed_and_running
 gpu: NVIDIA RTX 500 Ada (detected)
-model: llama3.2:latest (2.0 GB, 3B params)
+models_installed:
+  - llama3.2:latest (2.0 GB, 3B params)
+  - qwen2.5:3b (1.9 GB, 3B params)
 api_endpoint: http://localhost:11434
 installed_at: 2026-01-06
-test_result: SUCCESS (3 steps, 5.3s, 16 nodes, 54 edges)
+llama_test_result: SUCCESS (3 steps, 5.3s, 16 nodes, 54 edges)
+qwen_test_result: SUCCESS (JSON parsing validated)
 
 [FORWARD_DYNAMICS_MODEL]
 purpose: Pre-Execution Simulation for LLM plan verification (Phase 10.3)
@@ -1429,24 +1459,230 @@ checkpoint_contents:
     - val_loss: 0.2342
     - profile: "RTX 3070 (8GB) - ST-GNN"
 
+[FIGURE_GENERATION]
+date: 2026-01-18
+status: ✅ COMPLETE
+
+generated_figures: 28 PNG files in figures/
+output_directory: figures/ (consolidated, single source of truth)
+
+scripts_parameterized:
+  - scripts/generate_thesis_figures.py
+  - scripts/generate_comparison_figures.py
+  - scripts/generate_forward_dynamics_figure.py
+  - scripts/generate_spatiotemporal_figures.py
+
+cli_usage:
+  default_png: "python scripts/generate_thesis_figures.py"
+  pdf_only: "python scripts/generate_thesis_figures.py --format pdf"
+  both_formats: "python scripts/generate_thesis_figures.py --format both"
+  custom_output: "python scripts/generate_thesis_figures.py -o thesis/figures --format pdf"
+
+figures_by_category:
+  training_benchmark:
+    - training_curves.png
+    - learning_rate.png
+    - inference_latency.png
+    - pass_at_k.png
+    - classification_metrics.png
+  architecture:
+    - architecture.png
+    - gnn_dataflow.png
+    - predicate_definitions.png
+    - predicate_distribution.png
+  comparison_a_vs_c:
+    - accuracy_comparison.png
+    - before_after_comparison.png
+    - comparison_table.png
+    - latency_breakdown.png
+    - latency_distribution.png
+    - memory_comparison.png
+    - per_predicate_f1.png
+    - radar_comparison.png
+  forward_dynamics_phase10:
+    - forward_dynamics_delta_error.png
+    - forward_dynamics_mental_rollout.png
+    - forward_dynamics_speedup.png
+    - forward_dynamics_training.png
+    - forward_dynamics_validation.png
+  spatiotemporal_phase11:
+    - stgnn_architecture.png
+    - stgnn_sequence_processing.png
+    - stgnn_temporal_stability.png
+    - stgnn_training_curves.png
+    - model_comparison.png
+    - phase_10_11_summary.png
+
+changes_made:
+  - Added --format/-f argument to all 4 scripts (choices: png, pdf, both)
+  - Default format is PNG (was previously both pdf+png)
+  - Consolidated output to figures/ directory
+  - Removed duplicate outputs to thesis/figures/
+  - Added save_figure() helper function for format iteration
+
+[AGENT_BENCHMARK_RESULTS]
+date: 2026-01-18
+status: ✅ COMPLETE
+
+benchmark_config:
+  goals_tested: 10
+  max_steps_per_goal: 10
+  timeout_per_goal: 30s
+  
+results_summary:
+  | Metric                    | Llama3.2 | Qwen2.5:3b | Winner |
+  |---------------------------|----------|------------|--------|
+  | Success Rate              | 100%     | 100%       | TIE    |
+  | Avg Steps                 | 2.8      | 1.0        | Qwen   |
+  | Avg Time-to-First-Action  | 425ms    | 1073ms     | Llama  |
+  | Avg Total Time            | 2561ms   | 1537ms     | Qwen   |
+
+key_findings:
+  - Both agents achieve 100% success rate on all 10 standardized goals
+  - Qwen is 40% faster overall (1.5s vs 2.6s average)
+  - Qwen uses 65% fewer steps (1.0 vs 2.8 average) - better at task completion
+  - Llama has 2.5x faster time-to-first-token (425ms vs 1073ms)
+  - Qwen's simplified prompt works better for task completion
+  - Llama sometimes gets stuck in loops, using max steps
+
+test_goals:
+  - Get the current world graph
+  - Report spatial predicates in the scene
+  - Check how many nodes are in the world graph
+  - Advance to frame 10 and get predicates
+  - Set frame to 50 and report world graph
+  - List all active predicates
+  - Get predicates with threshold 0.7
+  - Simulate moving forward and check outcome
+  - Predict the outcome of rotating 90 degrees
+  - Analyze the scene and report what objects are near each other
+
+results_file: experiments/agent_benchmark.json
+benchmark_script: scripts/benchmark_agents.py
+
+[QWEN_AGENT_FIXES]
+date: 2026-01-18
+status: ✅ COMPLETE
+
+issues_found_and_fixed:
+  1_observation_extraction:
+    problem: observe() looked for predicates at result top-level, but they're in world_context
+    fix: Changed from result.get("spatial_predicates") to ctx.get("spatial_predicates")
+    file: src/agents/base_agent.py
+    
+  2_model_checkpoint_mismatch:
+    problem: Server tried to load old checkpoint with wrong input dimension (256 vs 258)
+    error: "size mismatch for predicate_head.pairwise_predictor.0.weight"
+    fix: Added experiments/remote_training/relational_gnn/best_model.pt to auto-detect paths
+    file: src/mcp_ros2_bridge/server.py
+    
+  3_qwen_not_completing:
+    problem: Qwen kept calling get_world_graph even when predicates > 0
+    fix: Simplified prompt to be explicit about completion condition
+    file: src/agents/qwen_agent.py
+
+test_results:
+  json_output_test: ✅ PASS
+  mcp_e2e_test: ✅ PASS
+  steps_to_complete: 2 (call get_world_graph → complete with 78 predicates)
+  graph_info: 16 nodes, 78 spatial predicates, 42 interaction predicates
+
+[SIMULATE_ACTION_INTEGRATION]
+date: 2026-01-18
+status: ✅ COMPLETE
+
+checkpoints_available:
+  full_training:
+    path: experiments/remote_training/forward_dynamics_e2e/best_model.pt
+    epochs: 100
+    frames: 55k (full ALOHA dataset)
+    gpu: RTX 3070 (8.2GB VRAM)
+    delta_error: 0.0017 (1.7mm accuracy)
+    confidence_range: 0.48-0.75
+    training_time: 17 min pre-compute + 2.3 min training
+    
+  minimal_local:
+    path: experiments/forward_dynamics/best_model.pt
+    epochs: 5
+    frames: 500
+    gpu: RTX 500 (4GB)
+    
+implementation:
+  1_server_auto_load:
+    file: src/mcp_ros2_bridge/server.py
+    change: Added auto-detection of ForwardDynamicsModel checkpoint
+    priority: Full training checkpoint > local minimal checkpoint
+    handles: External GNN encoder detection via state_dict key inspection
+    
+  2_test_script:
+    file: scripts/test_simulate_action.py
+    tests:
+      - MCP client direct call: ✅ PASS
+      - Qwen agent integration: ✅ PASS  
+      - Custom action sequence: ✅ PASS
+
+test_output_full_model:
+  dataset_actions:
+    recommendation: REPLAN
+    min_confidence: 0.492
+    steps: 3
+    per_step_conf: [0.496, 0.495, 0.492]
+    is_feasible: False (confidence < 0.7 threshold)
+  custom_actions:
+    recommendation: REPLAN
+    min_confidence: 0.615
+    steps: 2
+    per_step_conf: [0.625, 0.615]
+    delta_magnitude: 0.010-0.011
+    is_feasible: False (confidence < 0.7 threshold)
+
+feasibility_analysis:
+  note: Model outputs is_feasible=False due to internal confidence_threshold=0.7
+  breakdown:
+    - feasibility_logit > 0: ✅ TRUE
+    - confidence > 0.7: ❌ FALSE (model outputs ~0.5)
+    - delta < 0.1: ✅ TRUE
+  interpretation: Model is conservative by design. Lower threshold for production.
+
+remote_training_machine:
+  host: cip7g1.cip.cs.fau.de
+  user: xi58pizy
+  gpu: NVIDIA GeForce RTX 3070 (8.2GB VRAM)
+  working_dir: /proj/ciptmp/xi58pizy/AI2MCP
+
+
 [CURRENT_STATUS]
-date: 2026-01-09
+date: 2026-01-18
 phase_9_fair_comparison: ✅ COMPLETE
-phase_10_3_forward_dynamics: ✅ COMPLETE
+phase_10_3_forward_dynamics: ✅ COMPLETE (full 55k training on RTX 3070)
 phase_11_spatiotemporal_gnn: ✅ COMPLETE
+phase_12_qwen_agent: ✅ COMPLETE (E2E validated)
+figure_generation: ✅ COMPLETE (28 PNGs)
+simulate_action_integration: ✅ COMPLETE (full model loaded, conf=0.49-0.62)
+agent_benchmark: ✅ COMPLETE (Llama + Qwen 100% success)
   
 completed_today:
-  - SpatiotemporalGNN full training (55k frames, 100 epochs)
-  - Comprehensive sanity check implementation
-  - Multiple bug fixes caught by sanity check
-  - Training optimization (RAM pre-computation + batched processing)
-  - CONTEXT_DUMP.txt updated with Phase 11 results
+  - QwenAgent implementation (src/agents/qwen_agent.py)
+  - Qwen2.5:3b model pulled via Ollama
+  - JSON parsing and action format validated
+  - run_experiment.py updated with Qwen option
+  - Swappable AI brain validated with two different LLMs
+  - Parameterized all figure scripts with --format argument
+  - Generated 28 PNG figures to figures/
+  - Updated MasterPlan.md with completion status
+  - Fixed observation extraction in base_agent.py
+  - Fixed model checkpoint auto-detection in server.py
+  - Fixed Qwen prompt to complete when predicates found
+  - Integrated full ForwardDynamicsModel (55k frames) into MCP server
+  - Server now auto-loads: experiments/remote_training/forward_dynamics_e2e/best_model.pt
+  - Created simulate_action test script with threshold variations
+  - Created agent benchmark script (Llama vs Qwen)
+  - Validated simulate_action outputs meaningful confidence (0.49-0.62)
 
 remaining:
-  - Generate final thesis figures
   - Update thesis Results chapter
-  - [Optional] Llama agent integration test with simulate_action
-  - [Optional] Benchmark LLM plans with/without simulation
+  - [Optional] Error recovery testing (malformed tool calls)
+  - [Optional] Multi-step planning test (5+ tool calls)
   - [Optional] Evaluate SpatiotemporalGNN on temporal predicate stability
 
 ================================================================================

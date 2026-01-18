@@ -44,6 +44,14 @@ COLORS = {
 }
 
 
+def save_figure(fig, output_dir: Path, name: str, formats: list[str]) -> None:
+    """Save figure in specified formats."""
+    for fmt in formats:
+        path = output_dir / f"{name}.{fmt}"
+        fig.savefig(path)
+        print(f"Saved: {path}")
+
+
 def load_training_history(path: Path) -> dict | None:
     """Load training history from JSON file."""
     if not path.exists():
@@ -54,7 +62,7 @@ def load_training_history(path: Path) -> dict | None:
         return json.load(f)
 
 
-def plot_stgnn_training(output_dir: Path):
+def plot_stgnn_training(output_dir: Path, formats: list[str]):
     """Plot SpatiotemporalGNN training curves."""
     history_path = Path("experiments/remote_training/spatiotemporal_gnn/training_history.json")
     history = load_training_history(history_path)
@@ -110,14 +118,11 @@ def plot_stgnn_training(output_dir: Path):
         ax2.set_yscale("log")
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"stgnn_training_curves.{fmt}")
+    save_figure(fig, output_dir, "stgnn_training_curves", formats)
     plt.close(fig)
-    print("Saved: stgnn_training_curves.pdf/png")
 
 
-def plot_model_comparison(output_dir: Path):
+def plot_model_comparison(output_dir: Path, formats: list[str]):
     """Compare all three models: RelationalGNN, ForwardDynamics, SpatiotemporalGNN."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
@@ -204,14 +209,11 @@ def plot_model_comparison(output_dir: Path):
                          fontsize=9, style="italic")
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"model_comparison.{fmt}")
+    save_figure(fig, output_dir, "model_comparison", formats)
     plt.close(fig)
-    print("Saved: model_comparison.pdf/png")
 
 
-def plot_temporal_architecture(output_dir: Path):
+def plot_temporal_architecture(output_dir: Path, formats: list[str]):
     """Create SpatiotemporalGNN architecture diagram."""
     fig, ax = plt.subplots(figsize=(12, 6))
     
@@ -262,14 +264,11 @@ def plot_temporal_architecture(output_dir: Path):
     ax.set_title("SpatiotemporalGNN Architecture (Phase 11)", fontsize=14, fontweight="bold", pad=20)
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"stgnn_architecture.{fmt}")
+    save_figure(fig, output_dir, "stgnn_architecture", formats)
     plt.close(fig)
-    print("Saved: stgnn_architecture.pdf/png")
 
 
-def plot_summary_table(output_dir: Path):
+def plot_summary_table(output_dir: Path, formats: list[str]):
     """Generate summary table for all Phase 10-11 models."""
     fig, ax = plt.subplots(figsize=(14, 5))
     ax.axis("off")
@@ -311,14 +310,11 @@ def plot_summary_table(output_dir: Path):
             ha="center", fontsize=9, style="italic", transform=ax.transAxes)
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"phase_10_11_summary.{fmt}")
+    save_figure(fig, output_dir, "phase_10_11_summary", formats)
     plt.close(fig)
-    print("Saved: phase_10_11_summary.pdf/png")
 
 
-def plot_temporal_stability(output_dir: Path):
+def plot_temporal_stability(output_dir: Path, formats: list[str]):
     """Visualize temporal stability / anti-flicker effect of ST-GNN."""
     np.random.seed(42)
     
@@ -399,14 +395,11 @@ def plot_temporal_stability(output_dir: Path):
                      fontsize=12, fontweight='bold')
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"stgnn_temporal_stability.{fmt}")
+    save_figure(fig, output_dir, "stgnn_temporal_stability", formats)
     plt.close(fig)
-    print("Saved: stgnn_temporal_stability.pdf/png")
 
 
-def plot_sequence_processing(output_dir: Path):
+def plot_sequence_processing(output_dir: Path, formats: list[str]):
     """Visualize how ST-GNN processes sequences."""
     fig, ax = plt.subplots(figsize=(14, 6))
     ax.axis("off")
@@ -464,41 +457,52 @@ def plot_sequence_processing(output_dir: Path):
                  fontsize=14, fontweight="bold", pad=20)
     
     plt.tight_layout()
-    
-    for fmt in ["pdf", "png"]:
-        fig.savefig(output_dir / f"stgnn_sequence_processing.{fmt}")
+    save_figure(fig, output_dir, "stgnn_sequence_processing", formats)
     plt.close(fig)
-    print("Saved: stgnn_sequence_processing.pdf/png")
+
+
+def parse_formats(format_arg: str) -> list[str]:
+    """Parse format argument into list of formats."""
+    if format_arg == "both":
+        return ["png", "pdf"]
+    return [format_arg]
 
 
 def main():
-    output_dir = Path("thesis/figures")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    import argparse
     
-    # Also save to main figures folder
-    main_figures = Path("figures")
-    main_figures.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description="Generate SpatiotemporalGNN figures")
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default="figures",
+        help="Output directory for figures",
+    )
+    parser.add_argument(
+        "--format", "-f",
+        type=str,
+        choices=["png", "pdf", "both"],
+        default="png",
+        help="Output format: png (default), pdf, or both",
+    )
+    args = parser.parse_args()
+    
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    formats = parse_formats(args.format)
     
     print("=" * 60)
     print("Generating SpatiotemporalGNN (Phase 11) Figures")
+    print(f"Output: {output_dir}")
+    print(f"Format(s): {', '.join(formats)}")
     print("=" * 60)
     
-    plot_stgnn_training(output_dir)
-    plot_model_comparison(output_dir)
-    plot_temporal_architecture(output_dir)
-    plot_summary_table(output_dir)
-    plot_temporal_stability(output_dir)
-    plot_sequence_processing(output_dir)
-    
-    # Copy key figures to main figures folder
-    import shutil
-    for name in ["stgnn_training_curves", "stgnn_architecture", 
-                 "stgnn_temporal_stability", "model_comparison", "phase_10_11_summary"]:
-        for fmt in ["pdf", "png"]:
-            src = output_dir / f"{name}.{fmt}"
-            if src.exists():
-                shutil.copy(src, main_figures / f"{name}.{fmt}")
-    print(f"Also copied to: {main_figures}")
+    plot_stgnn_training(output_dir, formats)
+    plot_model_comparison(output_dir, formats)
+    plot_temporal_architecture(output_dir, formats)
+    plot_summary_table(output_dir, formats)
+    plot_temporal_stability(output_dir, formats)
+    plot_sequence_processing(output_dir, formats)
     
     print("\n" + "=" * 60)
     print(f"All figures saved to: {output_dir}")

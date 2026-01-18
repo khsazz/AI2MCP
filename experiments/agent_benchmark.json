@@ -1,0 +1,184 @@
+{
+  "timestamp": "2026-01-18 03:26:29",
+  "goals_count": 10,
+  "llama": {
+    "success_rate": 1.0,
+    "successes": 10,
+    "failures": 0,
+    "avg_steps": 2.8,
+    "avg_time_to_first_action_ms": 424.85655259224586,
+    "avg_total_time_ms": 2560.6638170895167,
+    "results": [
+      {
+        "goal": "Get the current world graph",
+        "success": true,
+        "steps": 10,
+        "time_ms": 6655.7941299979575,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Report spatial predicates in the scene",
+        "success": true,
+        "steps": 0,
+        "time_ms": 971.8497169669718,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Check how many nodes are in the world graph",
+        "success": true,
+        "steps": 0,
+        "time_ms": 929.4089860050008,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Advance to frame 10 and get predicates",
+        "success": true,
+        "steps": 0,
+        "time_ms": 916.1576330079697,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Set frame to 50 and report world graph",
+        "success": true,
+        "steps": 2,
+        "time_ms": 2111.684739997145,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "List all active predicates",
+        "success": true,
+        "steps": 3,
+        "time_ms": 2609.07922196202,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Get predicates with threshold 0.7",
+        "success": true,
+        "steps": 10,
+        "time_ms": 6702.353153959848,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Simulate moving forward and check outcome",
+        "success": true,
+        "steps": 0,
+        "time_ms": 946.1642850073986,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Predict the outcome of rotating 90 degrees",
+        "success": true,
+        "steps": 3,
+        "time_ms": 2882.879497949034,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Analyze the scene and report what objects are near each other",
+        "success": true,
+        "steps": 0,
+        "time_ms": 881.2668060418218,
+        "tool_calls": [],
+        "error": ""
+      }
+    ]
+  },
+  "qwen": {
+    "success_rate": 1.0,
+    "successes": 10,
+    "failures": 0,
+    "avg_steps": 1.0,
+    "avg_time_to_first_action_ms": 1073.3508711215109,
+    "avg_total_time_ms": 1536.5909672051203,
+    "results": [
+      {
+        "goal": "Get the current world graph",
+        "success": true,
+        "steps": 1,
+        "time_ms": 3269.5763680385426,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Report spatial predicates in the scene",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1348.2642460148782,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Check how many nodes are in the world graph",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1340.2352630509995,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Advance to frame 10 and get predicates",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1357.2338719968684,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Set frame to 50 and report world graph",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1348.7374719697982,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "List all active predicates",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1339.9515899945982,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Get predicates with threshold 0.7",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1359.2048339778557,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Simulate moving forward and check outcome",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1333.7864530039951,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Predict the outcome of rotating 90 degrees",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1333.567989000585,
+        "tool_calls": [],
+        "error": ""
+      },
+      {
+        "goal": "Analyze the scene and report what objects are near each other",
+        "success": true,
+        "steps": 1,
+        "time_ms": 1335.3515850030817,
+        "tool_calls": [],
+        "error": ""
+      }
+    ]
+  }
+}

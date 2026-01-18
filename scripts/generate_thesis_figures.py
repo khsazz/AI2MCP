@@ -67,7 +67,15 @@ def load_benchmark_results(path: Path) -> dict | None:
         return json.load(f)
 
 
-def plot_training_curves(history: dict, output_dir: Path) -> None:
+def save_figure(fig, output_dir: Path, name: str, formats: list[str]) -> None:
+    """Save figure in specified formats."""
+    for fmt in formats:
+        path = output_dir / f"{name}.{fmt}"
+        fig.savefig(path)
+        print(f"Saved: {path}")
+
+
+def plot_training_curves(history: dict, output_dir: Path, formats: list[str]) -> None:
     """Generate training loss and accuracy curves."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
     
@@ -112,15 +120,11 @@ def plot_training_curves(history: dict, output_dir: Path) -> None:
                  arrowprops=dict(arrowstyle='->', color=COLORS['neutral']))
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'training_curves.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'training_curves.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'training_curves', formats)
     plt.close()
 
 
-def plot_learning_rate_schedule(history: dict, output_dir: Path) -> None:
+def plot_learning_rate_schedule(history: dict, output_dir: Path, formats: list[str]) -> None:
     """Plot learning rate schedule over training."""
     fig, ax = plt.subplots(figsize=(6, 4))
     
@@ -136,14 +140,11 @@ def plot_learning_rate_schedule(history: dict, output_dir: Path) -> None:
     ax.set_yscale('log')
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'learning_rate.png'
-    plt.savefig(output_path)
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'learning_rate', formats)
     plt.close()
 
 
-def plot_inference_latency(benchmark: dict, output_dir: Path) -> None:
+def plot_inference_latency(benchmark: dict, output_dir: Path, formats: list[str]) -> None:
     """Plot inference latency distribution."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
     
@@ -200,22 +201,17 @@ def plot_inference_latency(benchmark: dict, output_dir: Path) -> None:
         ax2.set_title('(b) Time Distribution')
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'inference_latency.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'inference_latency.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'inference_latency', formats)
     plt.close()
 
 
-def plot_predicate_distribution(output_dir: Path) -> None:
+def plot_predicate_distribution(output_dir: Path, formats: list[str]) -> None:
     """Plot predicate type distribution from latest comparison results."""
     fig, ax = plt.subplots(figsize=(8, 5))
     
     # Load from latest comparison results (2026-01-08)
     comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
     if comparison_path.exists():
-        import json
         with open(comparison_path) as f:
             results = json.load(f)
         # Use per-predicate accuracy as proxy for detection quality
@@ -248,14 +244,11 @@ def plot_predicate_distribution(output_dir: Path) -> None:
         ax.set_xlim(0, 1.1)
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'predicate_distribution.png'
-    plt.savefig(output_path)
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'predicate_distribution', formats)
     plt.close()
 
 
-def plot_pass_at_k(benchmark: dict, output_dir: Path) -> None:
+def plot_pass_at_k(benchmark: dict, output_dir: Path, formats: list[str]) -> None:
     """Plot pass@k accuracy metrics."""
     fig, ax = plt.subplots(figsize=(8, 5))
     
@@ -289,15 +282,11 @@ def plot_pass_at_k(benchmark: dict, output_dir: Path) -> None:
     ax.legend(loc='lower right')
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'pass_at_k.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'pass_at_k.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'pass_at_k', formats)
     plt.close()
 
 
-def plot_classification_metrics(benchmark: dict, output_dir: Path) -> None:
+def plot_classification_metrics(benchmark: dict, output_dir: Path, formats: list[str]) -> None:
     """Plot predicate classification metrics (accuracy, precision, recall, F1)."""
     fig, ax = plt.subplots(figsize=(8, 5))
     
@@ -330,15 +319,11 @@ def plot_classification_metrics(benchmark: dict, output_dir: Path) -> None:
                     ha='center', va='bottom', fontsize=12, fontweight='bold')
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'classification_metrics.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'classification_metrics.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'classification_metrics', formats)
     plt.close()
 
 
-def plot_mcp_architecture(output_dir: Path) -> None:
+def plot_mcp_architecture(output_dir: Path, formats: list[str]) -> None:
     """Generate MCP architecture diagram."""
     fig, ax = plt.subplots(figsize=(10, 6))
     
@@ -386,15 +371,11 @@ def plot_mcp_architecture(output_dir: Path) -> None:
     ax.set_title('MCP-ROS2 Bridge Architecture', fontsize=14, fontweight='bold', pad=20)
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'architecture.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'architecture.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'architecture', formats)
     plt.close()
 
 
-def plot_predicate_definitions(output_dir: Path) -> None:
+def plot_predicate_definitions(output_dir: Path, formats: list[str]) -> None:
     """Generate visual predicate definitions figure with geometric conditions."""
     fig, ax = plt.subplots(figsize=(14, 8))
     ax.axis('off')
@@ -480,15 +461,11 @@ def plot_predicate_definitions(output_dir: Path) -> None:
     ax.set_ylim(0, 1)
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'predicate_definitions.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'predicate_definitions.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'predicate_definitions', formats)
     plt.close()
 
 
-def plot_gnn_dataflow(output_dir: Path) -> None:
+def plot_gnn_dataflow(output_dir: Path, formats: list[str]) -> None:
     """Generate GNN data flow diagram showing 14-DoF to graph transformation."""
     fig, ax = plt.subplots(figsize=(14, 6))
     ax.axis('off')
@@ -566,15 +543,11 @@ def plot_gnn_dataflow(output_dir: Path) -> None:
                  fontsize=14, fontweight='bold', pad=15)
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'gnn_dataflow.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'gnn_dataflow.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'gnn_dataflow', formats)
     plt.close()
 
 
-def plot_comparison_table(output_dir: Path) -> None:
+def plot_comparison_table(output_dir: Path, formats: list[str]) -> None:
     """Generate comparison table as figure."""
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.axis('off')
@@ -582,7 +555,6 @@ def plot_comparison_table(output_dir: Path) -> None:
     # Load from latest comparison results (2026-01-08)
     comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
     if comparison_path.exists():
-        import json
         with open(comparison_path) as f:
             results = json.load(f)
         a = results["option_a"]
@@ -647,22 +619,17 @@ def plot_comparison_table(output_dir: Path) -> None:
             ha='center', fontsize=9, style='italic', transform=ax.transAxes)
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'comparison_table.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'comparison_table.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'comparison_table', formats)
     plt.close()
 
 
-def plot_before_after_comparison(output_dir: Path) -> None:
+def plot_before_after_comparison(output_dir: Path, formats: list[str]) -> None:
     """Plot Option A vs Option C comparison (fair comparison, 55k vs 55k)."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
     # Load from latest comparison results
     comparison_path = Path("experiments/comparison_final_real/comparison_results.json")
     if comparison_path.exists():
-        import json
         with open(comparison_path) as f:
             results = json.load(f)
         a_acc = results["option_a"]["accuracy"]["micro_accuracy"] * 100
@@ -734,12 +701,15 @@ def plot_before_after_comparison(output_dir: Path) -> None:
                     ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     plt.tight_layout()
-    
-    output_path = output_dir / 'before_after_comparison.png'
-    plt.savefig(output_path)
-    plt.savefig(output_dir / 'before_after_comparison.pdf')
-    print(f"Saved: {output_path}")
+    save_figure(fig, output_dir, 'before_after_comparison', formats)
     plt.close()
+
+
+def parse_formats(format_arg: str) -> list[str]:
+    """Parse format argument into list of formats."""
+    if format_arg == "both":
+        return ["png", "pdf"]
+    return [format_arg]
 
 
 def main():
@@ -749,6 +719,13 @@ def main():
         type=Path,
         default=Path("figures"),
         help="Output directory for figures",
+    )
+    parser.add_argument(
+        "--format", "-f",
+        type=str,
+        choices=["png", "pdf", "both"],
+        default="png",
+        help="Output format: png (default), pdf, or both",
     )
     parser.add_argument(
         "--training-history",
@@ -764,9 +741,13 @@ def main():
     )
     args = parser.parse_args()
     
+    # Parse formats
+    formats = parse_formats(args.format)
+    
     # Create output directory
     args.output.mkdir(parents=True, exist_ok=True)
     print(f"Generating figures in: {args.output}")
+    print(f"Output format(s): {', '.join(formats)}")
     print("=" * 50)
     
     # Load data
@@ -776,22 +757,22 @@ def main():
     # Generate figures
     if history:
         print("\nGenerating training figures...")
-        plot_training_curves(history, args.output)
-        plot_learning_rate_schedule(history, args.output)
+        plot_training_curves(history, args.output, formats)
+        plot_learning_rate_schedule(history, args.output, formats)
     
     if benchmark:
         print("\nGenerating benchmark figures...")
-        plot_inference_latency(benchmark, args.output)
-        plot_pass_at_k(benchmark, args.output)
-        plot_classification_metrics(benchmark, args.output)
+        plot_inference_latency(benchmark, args.output, formats)
+        plot_pass_at_k(benchmark, args.output, formats)
+        plot_classification_metrics(benchmark, args.output, formats)
     
     print("\nGenerating additional figures...")
-    plot_predicate_distribution(args.output)
-    plot_predicate_definitions(args.output)
-    plot_mcp_architecture(args.output)
-    plot_gnn_dataflow(args.output)
-    plot_comparison_table(args.output)
-    plot_before_after_comparison(args.output)
+    plot_predicate_distribution(args.output, formats)
+    plot_predicate_definitions(args.output, formats)
+    plot_mcp_architecture(args.output, formats)
+    plot_gnn_dataflow(args.output, formats)
+    plot_comparison_table(args.output, formats)
+    plot_before_after_comparison(args.output, formats)
     
     print("\n" + "=" * 50)
     print(f"All figures saved to: {args.output}")

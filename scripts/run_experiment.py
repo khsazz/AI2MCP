@@ -6,7 +6,8 @@ This script runs the "swappable brain" experiment:
 2. Start MCP-ROS2 bridge
 3. Run navigation task with Claude agent
 4. Run same task with Llama agent
-5. Compare results and log for thesis
+5. Run same task with Qwen agent
+6. Compare results and log for thesis
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from agents.base_agent import AgentConfig
 from agents.claude_agent import ClaudeAgent
 from agents.llama_agent import LlamaAgent
+from agents.qwen_agent import QwenAgent
 
 
 async def run_agent_experiment(
@@ -36,7 +38,7 @@ async def run_agent_experiment(
     """Run experiment with specified agent.
     
     Args:
-        agent_type: "claude" or "llama"
+        agent_type: "claude", "llama", or "qwen"
         goal: Navigation goal description
         mcp_url: MCP server URL
         max_steps: Maximum steps before timeout
@@ -54,6 +56,8 @@ async def run_agent_experiment(
         agent = ClaudeAgent(config=config)
     elif agent_type == "llama":
         agent = LlamaAgent(config=config)
+    elif agent_type == "qwen":
+        agent = QwenAgent(config=config)
     else:
         raise ValueError(f"Unknown agent type: {agent_type}")
 
@@ -114,8 +118,8 @@ async def run_comparison_experiment(
         "agents": {},
     }
 
-    # Run with Claude
-    print("\n[1/2] Running with Claude agent...")
+    # Run with Claude (optional, requires API key)
+    print("\n[1/3] Running with Claude agent...")
     try:
         claude_results = await run_agent_experiment("claude", goal, mcp_url)
         all_results["agents"]["claude"] = claude_results
@@ -128,8 +132,8 @@ async def run_comparison_experiment(
     # Brief pause between experiments
     await asyncio.sleep(2)
 
-    # Run with Llama
-    print("\n[2/2] Running with Llama agent...")
+    # Run with Llama (local via Ollama)
+    print("\n[2/3] Running with Llama agent...")
     try:
         llama_results = await run_agent_experiment("llama", goal, mcp_url)
         all_results["agents"]["llama"] = llama_results
@@ -138,6 +142,20 @@ async def run_comparison_experiment(
     except Exception as e:
         print(f"Llama experiment failed: {e}")
         all_results["agents"]["llama"] = {"error": str(e)}
+
+    # Brief pause between experiments
+    await asyncio.sleep(2)
+
+    # Run with Qwen (local via Ollama)
+    print("\n[3/3] Running with Qwen agent...")
+    try:
+        qwen_results = await run_agent_experiment("qwen", goal, mcp_url)
+        all_results["agents"]["qwen"] = qwen_results
+        print(f"Qwen: {'SUCCESS' if qwen_results['success'] else 'FAILED'} "
+              f"in {qwen_results['total_steps']} steps ({qwen_results['duration_seconds']}s)")
+    except Exception as e:
+        print(f"Qwen experiment failed: {e}")
+        all_results["agents"]["qwen"] = {"error": str(e)}
 
     # Summary
     print("\n" + "=" * 60)
@@ -188,14 +206,14 @@ def main() -> None:
     parser.add_argument(
         "--agent",
         type=str,
-        choices=["claude", "llama", "both"],
-        default="both",
-        help="Which agent(s) to run",
+        choices=["claude", "llama", "qwen", "all"],
+        default="all",
+        help="Which agent(s) to run (all = claude, llama, qwen)",
     )
 
     args = parser.parse_args()
 
-    if args.agent == "both":
+    if args.agent == "all":
         asyncio.run(run_comparison_experiment(
             goal=args.goal,
             mcp_url=args.mcp_url,
