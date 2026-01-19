@@ -1,0 +1,68 @@
+% ============================================================================
+% Chapter 1: Introduction
+% ============================================================================
+
+\chapter{Introduction}
+\label{ch:introduction}
+
+\section{Motivation}
+
+The recent proliferation of Large Language Models (LLMs) and multi-modal foundation models has catalyzed a fundamental paradigm shift in the field of robotics, transitioning from deterministic, task-specific programming toward \textit{protocol-driven robotics} and \textit{embodied AI} \cite{vaswani2017attention}. Autonomous agents are increasingly expected to perceive, reason, and adapt enclosed by unstructured, dynamic environments that symbolize the physical world in this emerging landscape \cite{adebayo_leveraging_2024}. Despite that, a significant ``socio-technical gap'' remains: the deployment of these sophisticated cognitive models on physical hardware is frequently hindered by a structural mismatch between high-level AI interfaces and low-level robot control systems \cite{lee_robot_2025}.
+
+For every individual model-robot interaction, this divergence necessitates custom, platform-specific combinations, resulting in what is known as the \textbf{($N \times M$) integration problem}. The development of $N$ models for $M$ robot platforms involves $N \times M$ custom implementations, an approach that is prohibitively expensive in terms of engineering effort, architecturally fragile, and inherently blurred for critical safety auditing in this scenario \cite{gambo_systematic_2025, lee_robot_2025}. To sustain the current pace of AI innovation, there is an urgent requirement for a standardized, protocol-centric middleware layer that decouples robotic intelligence from specific hardware implementations \cite{gosselin_intelligent_2023}. Such a layer must provide a ``universal plug'' for robots, analogous to how USB-C standardized hardware peripherals, enabling robotic capabilities to be exposed as a ``tool bus'' for agent-level cognition \cite{lee_robot_2025}. 
+
+\section{Research Question}
+
+This thesis investigates a fundamental challenge in robotic interoperability through the following research question:
+\begin{quote}
+\textit{Can a standardized middleware protocol effectively decouple robotic intelligence from hardware, allowing diverse AI models to control robotic systems through a unified interface while maintaining the real-time performance required for embodied, physically grounded interaction?}
+\end{quote}
+
+\section{Hypotheses}
+To evaluate this question, we test the following hypotheses:
+\begin{enumerate}
+    \item \textbf{Decoupling Success}: A standardized MCP-to-ROS~2 bridge allows for the hot-swapping of local models (Llama 3.2 vs. Qwen 2.5) with zero modifications to the robotic control stack while maintaining a task success rate ($Pass@1$) $\geq 90\%$.
+    \item \textbf{Representation Efficiency}: A RelationalGNN operating solely on 14-DoF kinematic streams provides sufficient semantic grounding for spatial predicates, achieving higher inference speeds than multimodal vision stacks without a statistically significant loss in accuracy.
+    \item \textbf{Protocol Viability}: The JSON-RPC over SSE transport layer provides sufficient throughput ($\geq 15$ ops/sec) to support interactive agent-robot dialogue in non-reflexive manipulation tasks.
+\end{enumerate}
+
+\section{Novelty vs. Integration}
+While individual components such as Graph Neural Networks and the Robot Operating System are well-established, this work provides a novel \textbf{protocol-centric synthesis}. Unlike existing bespoke integrations (e.g., SayCan), this is the first implementation of an MCP-to-ROS~2 bridge that integrates a relational reasoning layer and learned forward dynamics as standardized protocol "Tools." This work advances the field by moving from platform-specific VLA models to platform-agnostic, protocol-driven agents.
+
+We hypothesize that the Model Context Protocol (MCP), originally designed to bridge AI models with digital tools, can be adapted as a standardized, runtime-agnostic interface for robotics to solve the $N \times M$ integration crisis by treating robotic skills as swappable, network-accessible tools \cite{lee_robot_2025}.
+
+\section{Contributions}
+
+This work addresses the architectural fragmentation of embodied AI through the following technical contributions:
+
+\begin{enumerate}
+    \item \textbf{MCP-to-ROS 2 Bridge Architecture}: A novel middleware layer that translates robotic capabilities into 13 standardized \textit{Tools} (actions) and 13 \textit{Resources} (state) within a protocol-driven interface, allowing any MCP-compatible AI model to control ROS 2-based robots without bespoke integration.
+    
+    \item \textbf{RelationalGNN for Predicate Prediction}: A \textbf{Relational Graph Neural Network (RelationalGNN)} that converts raw 14-DoF joint-specific kinematic streams into structured spatial predicates, achieving \textbf{97.03\%} classification accuracy to provide AI models with structured environmental understanding~\cite{huang_planning_2022}.
+    
+    \item \textbf{Predictive Safety Guardrails via Learned Forward Dynamics}: A learned dynamics model that performs pre-execution rollouts to verify the physical feasibility of AI-generated plans, acting as a ``Physicality Filter'' at the protocol level with a state-prediction error of $\delta = 0.0017$ \cite{roth_learned_2025}.
+    
+    \item \textbf{Empirical Validation of Swappable Intelligence}: A comprehensive demonstration of protocol-driven model swapping, alternating control between local \textbf{Llama 3.2} and \textbf{Qwen 2.5} models through the same MCP bridge with zero changes to the underlying robotic stack.
+    
+    \item \textbf{Standardized Agentic Benchmarking}: The establishment of a 10-goal benchmark suite to evaluate agent performance, proving that Qwen 2.5 achieves \textbf{100\% success rates} while demonstrating 40\% higher efficiency in task completion compared to Llama 3.2.
+    
+    \item \textbf{Architecture Comparative Analysis for Structured Manipulation}: A systematic evaluation establishing that relational predicate extraction over kinematic graphs (Option A) is a significantly more efficient alternative to heavy multimodal vision pipelines (Option C) for structured manipulation tasks \cite{lin_efficient_2021}.
+\end{enumerate}
+
+\section{Thesis Structure}
+
+The remainder of this thesis is organized as follows:
+
+\begin{description}
+    \item[Chapter~\ref{ch:background}] provides the theoretical foundations of the Model Context Protocol, the Robot Operating System 2 (ROS 2), and Graph Neural Networks (GNNs), alongside a critical review of related work in LLM-robot integration.
+    
+    \item[Chapter~\ref{ch:methodology}] presents the architectural design of the MCP-ROS 2 bridge and the RelationalGNN model, detailing the mapping of robotic affordances to standardized tools, the implementation of Global Feature Conditioning (GFC), and the spatiotemporal reasoning engine.
+    
+    \item[Chapter~\ref{ch:implementation}] describes the technical implementation details, including the SSE transport layer, the GNN reasoning engine, and the RAM pre-computation strategy that enabled a 730$\times$ training speedup.
+    
+    \item[Chapter~\ref{ch:results}] presents experimental evaluations on predicate prediction accuracy, inference latency, agentic performance benchmarks for Llama and Qwen, and end-to-end protocol throughput.
+    
+    \item[Chapter~\ref{ch:discussion}] discusses the implications of swappable robotic intelligence, analyzes the ``Interaction Predicate Gap'' in kinematic datasets, and outlines future research trajectories.
+    
+    \item[Chapter~\ref{ch:conclusion}] concludes the thesis with a summary of the validated contributions and final remarks on the outlook of protocol-driven robotics.
+\end{description}

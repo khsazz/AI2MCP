@@ -1,0 +1,91 @@
+% ============================================================================
+% Chapter 4: Implementation
+% ============================================================================
+
+\chapter{Implementation}
+\label{ch:implementation}
+
+This chapter details the technical realization of the AI2MCP framework, encompassing the Model Context Protocol (MCP) server architecture, the ROS~2 bridging logic, and the high-performance training pipelines for relational reasoning. 
+
+\section{Software Package Architecture}
+
+The system is implemented as a modular Python package designed for high portability between development workstations and edge-computing platforms. The source code is organized to maintain a strict separation between the protocol transport, robotic abstraction, and neural reasoning engines.
+
+\begin{lstlisting}[language=bash, caption={AI2MCP Repository Structure}]
+src/
+  mcp_ros2_bridge/
+    server.py             # Starlette ASGI app & MCP server logic
+    ros_node.py           # ROS 2 node & mock-mode abstraction
+    tools/                # Consolidated tool registration logic
+    resources/            # Semantic URI state handlers
+  gnn_reasoner/
+    model/
+      relational_gnn.py    # GATv2-based geometric reasoner
+      forward_dynamics.py  # Pre-execution simulation model
+      spatiotemporal_gnn.py # GRU-enhanced temporal model
+    lerobot_transformer.py # State-to-graph conversion engine
+  agents/
+    base_agent.py          # MCPClient & observation logic
+    llama_agent.py         # Llama 3.2 Ollama integration
+    qwen_agent.py          # Qwen 2.5 Ollama integration
+scripts/
+  train_relational_gnn.py  # Optimized training with GPU profiles
+  benchmark_agents.py      # Standardized 10-goal benchmark suite
+  remote_train.sh          # Orchestration for RTX 3070 clusters
+\end{lstlisting}
+
+\section{Model Context Protocol Implementation}
+
+The protocol layer is built upon the official MCP Python SDK and the Starlette ASGI framework. Unlike standard ``stdio'' transports, this implementation utilizes \textbf{Server-Sent Events (SSE)} to facilitate bidirectional, network-accessible communication \cite{zeng_m3llm_2025}.
+
+\subsection{Transport Layer and Starlette Integration}
+
+A significant implementation challenge involved the routing of POST messages in the SSE transport. Initial attempts to use Starlette's \texttt{Route} class failed due to the transport's requirement for a raw ASGI app interface. This was resolved by utilizing the \texttt{Mount} directive to correctly delegate POST traffic to the MCP SDK \cite{pan_experiences_2025, chhetri_model_2025, ayyagari_model_2025}.
+
+\begin{lstlisting}[language=Python, caption={Starlette SSE Mount Implementation}]
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.routing import Mount
+
+class MCPRos2Server:
+    def create_app(self) -> Starlette:
+        self.sse_transport = SseServerTransport("/messages")
+        # Critical fix: Using Mount instead of Route for ASGI delegation
+        return Starlette(
+            routes=[
+                Mount("/messages", app=self.sse_transport.handle_post_message),
+                Route("/sse", endpoint=self.handle_sse),
+            ]
+        )
+\end{lstlisting}
+
+\subsection{Consolidated Handler Pattern}
+
+Due to internal API changes in the MCP SDK, a \textbf{Consolidated Handler Pattern} was implemented. Rather than individual decorators for each capability, the server employs centralized \texttt{list\_tools} and \texttt{call\_tool} handlers that route requests to specialized modules (\texttt{motion}, \texttt{perception}, \texttt{prediction}). Specifically, the \texttt{PredictionToolsManager} now handles advanced reasoning calls, including \texttt{simulate\_action} for pre-execution verification and \texttt{project\_future} for temporal state estimation. This ensures architectural resilience and simplifies the registration of the 14 tools and 13 resources available in the AI2MCP ecosystem.
+
+\section{Robotic Integration and State Abstraction}
+
+The \texttt{ROS2Bridge} class serves as the hardware-adjacent gateway. It abstracts the complexities of the Data Distribution Service (DDS) into Pythonic primitives.
+
+\subsection{DDS-to-Protocol Mapping}
+The bridge manages high-frequency state updates through a decentralized subscription model. ROS~2 Topics are aggregated into a persistent \textit{Belief State} which is subsequently used to populate MCP Resources. To support development on non-Linux platforms, a \textbf{Mock Mode} fallback was implemented, allowing the bridge to simulate kinematics when \texttt{rclpy} is unavailable \cite{parmar_syntactic_2020, maruyama_exploring_2016}.
+
+\section{Neural Reasoning Engine Implementation}
+
+\subsection{RelationalGNN with GFC}
+The RelationalGNN utilizes \texttt{GATv2Conv} layers from PyTorch Geometric. A key feature is the integration of \textbf{Global Feature Conditioning (GFC)} within the \texttt{PredicateHead}. By concatenating the global state vector $\mathbf{u}$ (gripper aperture) with the edge embeddings, the model enables accurate prediction of interaction-heavy predicates like \texttt{is\_holding} \cite{schlichtkrull_modeling_2017}.
+
+\subsection{Forward Dynamics and Auto-loading Logic}
+The \texttt{ForwardDynamicsModel} (259K parameters) is implemented to predict future world graphs $G_{t+1}$ based on a 14-DoF action vector. A critical feature of the server is its \textbf{Auto-loading Logic}, which allows the system to automatically detect and load the most accurate available model. At initialization, the server inspects the \texttt{experiments/remote\_training/} directory, prioritizing the full 55,000-frame checkpoint over local minimal versions. The logic includes state-dict key inspection to ensure compatibility with the external GNN encoder. This enables the \texttt{simulate\_action} tool to provide high-fidelity safety recommendations with minimal configuration.
+
+\section{Training Pipeline and Memory Optimization}
+
+\subsection{On-Demand Image Loading}
+To prevent memory exhaustion (OOM) during MultiModalGNN training, which requires processing 55,000 images, the pipeline was refactored to use on-demand loading. This reduced peak RAM usage from 62GB to 14.5GB, allowing for training on consumer-grade hardware.
+
+\subsection{Pre-computation for 730$\times$ Speedup}
+To handle the computational load of training the dynamics model, we implemented a \textbf{RAM Pre-computation} strategy. By caching all world graphs in system memory, we achieved a \textbf{730$\times$ speedup} in training time, reducing epoch duration from 17 minutes to 1.3 seconds \cite{liu_multi-grained_2025, patil_inside_2025, zutell_ros_2022}.
+
+\section{Development and Deployment Environment}
+
+The framework is verified for Python 3.10 and PyTorch 2.0. To facilitate easy reproduction, the environment is managed via a \texttt{pyproject.toml} specification, ensuring consistent dependency resolution for the MCP SDK and \textit{LeRobot} dataset API \cite{huggingface2024lerobot, macenski2022ros2, li_energyplus-mcp_2025, patil_model_2025}.

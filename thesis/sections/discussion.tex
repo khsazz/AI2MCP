@@ -1,0 +1,61 @@
+% ============================================================================
+% Chapter 6: Discussion
+% ============================================================================
+
+\chapter{Discussion}
+\label{ch:discussion}
+
+This chapter evaluates the implications of the experimental results, assesses the efficacy of the Model Context Protocol (MCP) as a robotic middleware, and identifies the limitations of kinematic-only relational reasoning. Finally, it outlines a roadmap for future research in protocol-driven embodied AI.
+
+\section{Implications of Protocol-Driven Robotics}
+
+\subsection{Architectural Resolution of the $N \times M$ Problem}
+The successful validation of the MCP-to-ROS~2 bridge confirms that robotic intelligence can be effectively decoupled from physical hardware. By standardizing the interface through which agents discover \textit{Tools} and \textit{Resources}, we resolve the $N \times M$ integration crisis. As highlighted in our empirical tests, swapping a local Llama 3.2 model for Qwen 2.5 required zero modification to the underlying control stack \cite{grey_understanding_2025}. This suggests a future where robotic capabilities are treated as swappable network services, a paradigm shift aligned with the emerging ``linchpin'' role of MCP in AI-robot ecosystems \cite{patil_model_2025, wang_towards_2025}.
+
+\subsection{Semantic Grounding: Kinematics vs. Multimodality}
+The fair architectural comparison (Section 5.3) provides a critical insight: in structured environments such as the ALOHA workspace, high-level spatial reasoning is fully solvable through kinematic state data alone. The observation that the RelationalGNN (Option A) outperformed the vision-augmented MultiModalGNN (Option C) by 0.5\% in accuracy—while being $16\times$ faster—demonstrates that ``richer'' sensor data is not always optimal for real-time control. However, this finding is contingent on the fixed nature of the ALOHA dataset. For unstructured environments involving novel objects, the token-heavy vision experts described in recent literature remain a necessity for generalized grounding \cite{zeng_m3llm_2025, hutchinson_evaluating_2023, van_amsterdam_gesture_2022, hasegawa_integrating_2023, pawlowski_effective_2023}.
+
+\subsection{The Physicality Filter and Agent Safety}
+The implementation of the \texttt{ForwardDynamicsModel} addresses a fundamental risk in LLM-driven control: the lack of physical intuition in language models. By serving as a protocol-level ``Physicality Filter,'' the system achieved a state-prediction error of $\delta = 0.0017$, enabling the bridge to reject kinematically impossible commands. This provides a structured approach to behavioral programming, where safety constraints are enforced at the communication layer rather than being hard-coded into the agent \cite{elyasaf_context-oriented_2020, mtowe_low-latency_2025}.
+
+\section{Identified Limitations}
+
+\subsection{The Interaction Predicate Gap}
+A significant limitation discovered during evaluation is the model's inability to resolve interaction predicates such as \texttt{is\_holding} and \texttt{is\_contacting} (F1: 0.000). This ``Interaction Predicate Gap'' stems from the extreme class imbalance in the ALOHA dataset and the lack of explicit contact annotations. While Global Feature Conditioning (GFC) improved synthetic performance to an F1 of 0.914, real-world kinematic streams lack the haptic or visual confirmation required to distinguish between proximity and true contact~\cite{hutchinson_evaluating_2023, van_amsterdam_gesture_2022}.
+
+\subsection{Protocol Latency vs. Reflexive Control}
+Although the MCP round-trip latency (mean 59.1ms) is sufficient for high-level agentic planning, it remains unsuitable for high-frequency reflexive control ($>20$ Hz). The overhead introduced by JSON-RPC serialization and SSE transport implies that while MCP is an ideal ``tool bus'' for cognition, safety-critical reflexes must remain localized within the ROS~2 middleware to prevent communication-induced instabilities~\cite{mtowe_low-latency_2025, zeng_knowledge-based_2025}.
+
+\subsection{Temporal Instability and Flicker}
+The frame-by-frame inference of the RelationalGNN occasionally results in ``predicate flicker,'' where relationships oscillate between binary states due to sensor noise~\cite{hutchinson_evaluating_2023, van_amsterdam_gesture_2022, zeng_knowledge-based_2025}. While the Spatiotemporal GNN (ST-GNN) addressed this through GRU-based memory (achieving ~90\% accuracy), the computational cost of maintaining temporal context over long horizons poses a challenge for edge-deployed hardware like the RTX 500 Ada.
+
+\subsection{Threats to Validity}
+\begin{description}
+    \item[Internal Validity] The heuristic label generation assumes perfect kinematic data. Sensor noise in real-world deployment could degrade predicate accuracy.
+    \item[External Validity] Results are benchmarked on the ALOHA static coffee dataset. Generalization to mobile bases or unstructured clutter (e.g., RLBench) remains unproven.
+    \item[Construct Validity] The $Pass@k$ metric evaluates protocol compliance and reasoning, but does not capture the "smoothness" of physical execution.
+\end{description}
+
+\subsection{Protocol Latency Bounds}
+Given the measured 59.1 ms mean round-trip latency, the maximum stable frequency for agentic decision-making is $\sim16.9$ Hz. While sufficient for high-level pick-and-place, this creates a performance ceiling for dynamic tasks (e.g., catching an object) where the required control frequency exceeds 50 Hz.
+
+\section{Future Research Directions}
+
+\subsection{Ontology-Aware Heterogeneous GNNs (HetGNN)}
+To move beyond the current flat graph structure, future work should explore Heterogeneous GNNs. By assigning distinct node types (e.g., \textit{Actor}, \textit{Interactable}, \textit{Static}) and edge types (e.g., \textit{Kinematic}, \textit{Spatial}), the model could learn more nuanced relationships, such as the difference between a robot joint connection and a gripper-object interaction. \cite{lemaignan_artificial_2017, hasegawa_integrating_2023}
+
+\subsection{Knowledge Distillation for Edge Deployment}
+Given the VRAM constraints of edge hardware, a promising direction involves distilling the knowledge from a high-accuracy teacher model (MultiModalGNN) into a lightweight student model (RelationalGNN). This would allow edge robots to benefit from visual context during training while executing at sub-2ms speeds during inference. \cite{pawlowski_effective_2023, mtowe_low-latency_2025}
+
+\subsection{Standardized Safety Predicates}
+Expanding the protocol to include formal safety predicates—such as \texttt{is\_collision\_free} or \texttt{within\_safe\_velocity}—would allow the MCP bridge to act as a robust gatekeeper \cite{cesen_towards_2020}. This would ensure that any AI agent, regardless of its internal reasoning logic, remains bounded by the physical safety envelope of the robot.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/comparison_table.png}
+    \caption{Conceptual roadmap for protocol-driven robotics: Moving from frame-based perception to spatiotemporal, safety-aware agentic planning.}
+    \label{fig:roadmap}
+\end{figure}
+
+\section{Conclusion on Broader Impact}
+By standardizing the interface between AI and robotics, this work lowers the barrier to entry for developers and researchers. While security and cloud-dependency risks must be mitigated through authentication and rate-limiting, the potential for truly swappable, auditable robotic intelligence offers a path toward more transparent and accessible embodied AI systems. \cite{noauthor_integrating_2025}

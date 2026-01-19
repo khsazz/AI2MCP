@@ -1,0 +1,205 @@
+% ============================================================================
+% Chapter 3: Methodology
+% ============================================================================
+
+\chapter{Methodology}
+\label{ch:methodology}
+
+This chapter delineates the architectural design of the MCP-to-ROS~2 bridge and the RelationalGNN reasoning engine. By synthesizing standardized communication protocols with graph-based relational learning, this framework provides a substrate for decoupling high-level robotic intelligence from physical actuation while ensuring safety through pre-execution simulation \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, liang_point_2025}.
+
+\section{System Architecture and Theoretical Design}
+\label{sec:system-architecture}
+
+The architecture implements a multi-layered data flow designed to resolve the $N \times M$ integration problem \cite{zeng_m3llm_2025}. As illustrated in \Cref{fig:architecture}, the system is partitioned into four primary functional layers, ensuring that modifications to the AI ``brain'' or the robotic ``body'' do not require a full-stack reconfiguration \cite{liskova_cps-based_2025, imran_safety-critical_2025, zhou_multi-robot_2022}:
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/architecture.png}
+    \caption{MCP-ROS~2 Bridge architecture showing the flow from AI agents through the MCP protocol to the ROS~2 control stack. The GNN reasoner serves as the central semantic engine.}
+    \label{fig:architecture}
+\end{figure}
+
+\begin{enumerate}
+    \item \textbf{Cognitive Reasoning Layer}: Houses cloud-hosted or local Large Language Models (e.g., Qwen 2.5, Llama 3.2) that generate action plans and process semantic graph feedback \cite{fu_rosbag_2025, taghian_explainability_2024, zhou_multi-robot_2022}.
+    \item \textbf{Protocol Abstraction Layer}: An MCP stack utilizing Server-Sent Events (SSE) and JSON-RPC~2.0 transport to expose robot affordances through a standardized interface \cite{fu_rosbag_2025, liskova_cps-based_2025}. 
+    \item \textbf{Robotic Integration Layer (Bridge)}: A stateful intermediary that translates MCP tool calls into ROS~2 topics, services, and actions.
+    \item \textbf{Geometric Reasoning Layer}: A RelationalGNN reasoning engine that transforms raw 14-DoF kinematic streams into structured spatial predicates.
+\end{enumerate}
+
+\subsection{Design Principles for Decoupled Control}
+
+Our architecture adheres to three primary design principles to operationalize swappable intelligence:
+\begin{description}
+    \item[Semantic Decoupling] The AI agent interacts exclusively with abstract \textit{Tools} and \textit{Resources}, possessing no intrinsic knowledge of the ROS~2 computational graph or DDS-level messaging.
+    \item[Operational Transparency] Every tool call is logged with structured arguments and results, providing a protocol-level audit trail for safety monitoring and debugging \cite{fisac_general_2017, nguyen_model-free_2024, roth_learned_2025, liang_point_2025}.
+    \item[Hardware Agnosticism] Robotic capabilities are modularized as tool handlers. This allows the system to swap hardware by simply updating the tool registration at the bridge \cite{liskova_cps-based_2025, fu_rosbag_2025, ding_stacked_2025}.
+\end{description}
+
+\section{MCP Tool Design}
+\label{sec:mcp-tool-design}
+
+Robot capabilities are exposed to the AI model as 13 standardized MCP tools, categorizing low-level control and sensing into semantically meaningful families \cite{fu_rosbag_2025, liskova_cps-based_2025, zhou_multi-robot_2022}.
+
+\subsection{Motion and Perception Tool Families}
+Motion tools encapsulate actuation primitives as asynchronous MCP actions. Perception tools query sensor states and aggregate high-frequency data into compact summaries.
+
+\begin{table}[htbp]
+\centering
+\caption{Core Robotic Tool Families exposed via MCP}
+\label{tab:tools}
+\begin{tabular}{llp{6.5cm}}
+\toprule
+\textbf{Category} & \textbf{Tool Name} & \textbf{Description} \\
+\midrule
+\multirow{2}{*}{Motion} & \texttt{move\_forward} & Move forward by specified distance at a set speed \\
+                        & \texttt{rotate} & Rotate the robot by a specified angle in degrees \\
+\midrule
+\multirow{2}{*}{Perception} & \texttt{get\_obstacle\_distances} & Returns distance to obstacles segmented by direction \\
+                            & \texttt{scan\_surroundings} & Provides a 360° summary of detected obstacles \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Prediction and Reasoning Tools}
+These tools leverage the GNN for semantic reasoning and pre-execution simulation \cite{taghian_explainability_2024, zuo_graph-based_2021, zhou_multi-robot_2022, roth_learned_2025, jiang_learning_2024}. The \texttt{simulate\_action} tool provides an \texttt{EXECUTE} or \texttt{REPLAN} recommendation based on physical feasibility.
+
+\section{MCP Resource Design}
+\label{sec:mcp-resource-design}
+
+Resources provide read-only access to robot and environment states via semantic URIs, ensuring the agent maintains a belief state without polling \cite{fu_rosbag_2025, zhou_multi-robot_2022, taghian_explainability_2024}.
+
+\begin{table}[htbp]
+\centering
+\caption{MCP Resources for state monitoring}
+\label{tab:resources}
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{URI} & \textbf{Content} \\
+\midrule
+\texttt{robot://pose} & Current Cartesian position ($x, y, z$) and orientation ($\theta$) \\
+\texttt{robot://status} & Connectivity and movement status flags \\
+\texttt{robot://world\_graph} & Full RelationalGNN scene graph (JSON) \\
+\texttt{robot://lerobot/predicates} & Current list of active semantic predicates \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{RelationalGNN Architecture}
+\label{sec:relational-gnn-arch}
+
+The RelationalGNN processes kinematic states into relational predicates, enabling conceptual planning rather than raw coordinate manipulation \cite{taghian_explainability_2024, zuo_graph-based_2021, chen_relgnn_2025, zhou_multi-robot_2022, jiang_learning_2024}.
+
+\subsection{Graph Construction}
+Given a robot state vector $\mathbf{s} \in \mathbb{R}^{14}$ (representing the ALOHA system), we construct a graph $G = (V, E)$. Node features $\mathbf{x}_i$ are derived from forward kinematics:
+\begin{equation}
+    \mathbf{x}_i = [x_i, y_i, z_i, \theta_i, t_i]
+\end{equation}
+where $(x, y, z)$ is the 3D position, $\theta$ is the joint angle, and $t$ is a one-hot joint type encoding.
+
+\subsection{Message Passing and Global Feature Conditioning (GFC)}
+The architecture employs three GATv2 layers with residual connections. To accurately predict interaction predicates (e.g., \texttt{is\_holding}), we utilize \textbf{Global Feature Conditioning}, concatenating the global robot state $\mathbf{u}$ (e.g., gripper aperture) into the predicate head:
+\begin{equation}
+    P(\text{pred}_k | e_{ij}, \mathbf{u}) = \sigma(\text{MLP}_\text{pred}([\mathbf{h}_i \| \mathbf{h}_j \| \mathbf{u}]))
+\end{equation}
+This grounding ensures relational predictions are physically constrained by the robot's end-effectors.
+
+\section{Predictive Temporal Reasoning (ST-GNN)}
+\label{sec:stgnn}
+
+To mitigate predicate flickering caused by sensor noise, we implement a \textbf{Spatiotemporal GNN (ST-GNN)}. This architecture incorporates a Gated Recurrent Unit (GRU) layer following the base GNN encoder to maintain temporal memory over a sequence of 5 frames.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/stgnn_architecture.png}
+    \caption{Spatiotemporal GNN architecture: Integration of GRU layers with the RelationalGNN to ensure proactive temporal stability.}
+    \label{fig:stgnn}
+\end{figure}
+
+\section{Methodological Comparison: Option A vs. Option C}
+\label{sec:architecture-comparison}
+
+We compare kinematic-geometric reasoning (\textbf{Option A}) with multimodal fusion (\textbf{Option C}) which utilizes visual features via a DINOv2 backbone. As shown in \Cref{fig:design_latency}, Option A's $16\times$ speed advantage justifies its selection for real-time control.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/inference_latency.png}
+    \caption{Methodological Latency Analysis: Option A achieves 1.5ms inference vs. 24ms for Option C, enabling control loops at 600+ Hz.}
+    \label{fig:design_latency}
+\end{figure}
+
+\section{Safety Verification via Forward Dynamics}
+\label{sec:forward-dynamics}
+
+To address LLM non-determinism, a \textbf{ForwardDynamicsModel} performs rollouts to verify plans \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, molnar_model-free_2021, liang_point_2025, imran_safety-critical_2025}.
+\begin{equation}
+    [G_{t+1}, c] = \text{DynamicsNet}(G_t, a_t)
+\end{equation}
+The bridge uses the predicted world graph $G_{t+1}$ and confidence $c$ to reject unsafe commands.
+
+\section{Predicate Definitions}
+\label{sec:predicate-definitions}
+
+The RelationalGNN predicts nine binary predicates organized into two categories. These form the basis for the agent's environmental understanding.
+
+\begin{table}[htbp]
+\centering
+\caption{Predicate definitions for the RelationalGNN engine}
+\label{tab:predicate-definitions}
+\begin{tabular}{lll}
+\toprule
+\textbf{Category} & \textbf{Predicate} & \textbf{Geometric Condition} \\
+\midrule
+\multirow{5}{*}{Spatial} 
+    & \texttt{is\_near} & Euclidean Distance $< 0.2$m \\
+    & \texttt{is\_above} & Relative $\Delta z > 0.1$m \\
+    & \texttt{is\_below} & Relative $\Delta z < -0.1$m \\
+    & \texttt{is\_left\_of} & Relative $\Delta x < -0.05$m \\
+    & \texttt{is\_right\_of} & Relative $\Delta x > 0.05$m \\
+\midrule
+\multirow{4}{*}{Interaction}
+    & \texttt{is\_holding} & Gripper near object AND gripper closed \\
+    & \texttt{is\_contacting} & Euclidean Distance $< 0.05$m \\
+    & \texttt{is\_approaching} & Velocity vector oriented toward target \\
+    & \texttt{is\_retracting} & Velocity vector oriented away from target \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Training Objective and Heuristic Labeling}
+\label{sec:training-objective}
+
+We train with multi-label binary cross-entropy loss over all nine predicates. Since the ALOHA dataset lacks annotations, labels are generated heuristically based on kinematic thresholds \cite{zuo_graph-based_2021, zhou_multi-robot_2022, wang_research_2025}. To handle the 55,000-frame dataset, we implement \textbf{RAM Pre-computation}, achieving a \textbf{730$\times$ speedup} in training efficiency.
+
+\section{Agent Reasoning and Benchmarking Methodology}
+\label{sec:agent-benchmarking}
+
+To evaluate the core thesis claim of swappable intelligence, we implement a standardized interface for local Large Language Models (LLMs) and a rigorous benchmarking suite.
+
+\subsection{QwenAgent Integration and Prompt Design}
+
+The \texttt{QwenAgent} class facilitates the integration of the Qwen 2.5 (3B) model via the Ollama backend. Unlike previous iterations, the Qwen agent utilizes a simplified, rule-based system prompt designed to improve task completion and reduce instruction-following errors. 
+
+The prompt design enforces a strict \textit{Observation-Thought-Action} loop, where the agent is required to:
+\begin{enumerate}
+    \item Analyze the world graph retrieved via MCP Resources.
+    \item Explicitly state its reasoning (Thought) regarding the physical workspace.
+    \item Select a valid MCP tool call from the registered toolset.
+\end{enumerate}
+This design was specifically optimized to solve the ``infinite loop'' errors observed in earlier Llama 3.2 trials by providing explicit completion conditions when predicates match the user goal.
+
+\subsection{Standardized Agent Benchmark (10-Goal Suite)}
+
+We established a benchmark comprising ten standardized goals to quantitatively assess agentic performance across the MCP-ROS~2 bridge. The methodology evaluates success based on task completion, step efficiency, and total execution time. The goals are designed to test the breadth of the protocol's capabilities:
+
+\begin{enumerate}
+    \item \textbf{State Retrieval}: Retrieve the current world graph.
+    \item \textbf{Spatial Reasoning}: Report all active spatial predicates in the scene.
+    \item \textbf{Entity Analysis}: Count the number of nodes present in the current world graph.
+    \item \textbf{Temporal Navigation}: Advance to dataset frame 10 and retrieve active predicates.
+    \item \textbf{Belief State Updates}: Set the environment to frame 50 and report the updated graph.
+    \item \textbf{Predicate Inventory}: List every active relationship between robot links and objects.
+    \item \textbf{Sensitivity Testing}: Retrieve predicates using a customized confidence threshold (e.g., 0.7).
+    \item \textbf{Safety Verification}: Simulate a ``move forward'' action and verify the predicted outcome via forward dynamics.
+    \item \textbf{Mental Rollout}: Predict the outcome of a 90-degree rotation.
+    \item \textbf{Workspace Analysis}: Analyze the scene to identify object-to-object proximity (e.g., ``is cup near machine?'').
+\end{enumerate}

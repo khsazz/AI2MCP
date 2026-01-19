@@ -1,0 +1,132 @@
+% ============================================================================
+% MCP Middleware Thesis - Main Document
+% A Standardized Middleware Architecture for Decoupled Robotic Intelligence
+% using the Model Context Protocol (MCP)
+% ============================================================================
+
+\documentclass[12pt,a4paper]{report}
+
+% ============================================================================
+% Packages
+% ============================================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage[backend=biber,style=ieee]{biblatex}
+
+% Bibliography
+\addbibresource{references.bib}
+
+% Code listing style
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=pythonstyle}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=blue,
+}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Line spacing
+\onehalfspacing
+
+% ============================================================================
+% Document Info
+% ============================================================================
+\title{
+    \textbf{A Standardized Middleware Architecture for Decoupled Robotic Intelligence using the Model Context Protocol (MCP)}
+}
+\author{
+    KHALED HASAN SAZZAD\\
+    \\
+    Academic paper to obtain the degree of\\
+    \textbf{Master of Science (M.Sc.)}\\
+    \\
+    in the study program\\
+    \textbf{Data Science}\\
+    \\
+    at the Faculty of Natural Science of\\
+    \textbf{Friedrich-Alexander-Universität Erlangen-Nürnberg}\\
+}
+\date{\today}
+
+% ============================================================================
+% Document
+% ============================================================================
+\begin{document}
+
+% Title page
+\maketitle
+
+% Abstract
+\input{sections/abstract}
+
+% Table of contents
+\tableofcontents
+\listoffigures
+\listoftables
+
+% Main chapters
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/methodology}
+\input{sections/implementation}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+% Bibliography
+\printbibliography[heading=bibintoc,title={References}]
+
+% Appendix
+\appendix
+\input{sections/appendix}
+
+\end{document}
+

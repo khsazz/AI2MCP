@@ -1,0 +1,205 @@
+% ============================================================================
+% Appendix
+% ============================================================================
+
+\chapter{MCP Message Examples}
+\label{app:mcp-messages}
+
+This appendix provides complete examples of MCP messages for robot control.
+
+\section{Tool Discovery}
+
+\begin{lstlisting}[language=Python, caption={List tools request/response}]
+# Request
+{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 1
+}
+
+# Response
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "tools": [
+            {
+                "name": "move_forward",
+                "description": "Move the robot forward by specified distance",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "distance_meters": {"type": "number", "minimum": 0.1},
+                        "speed": {"type": "number", "default": 0.3}
+                    },
+                    "required": ["distance_meters"]
+                }
+            }
+        ]
+    },
+    "id": 1
+}
+\end{lstlisting}
+
+\section{Tool Execution}
+
+\begin{lstlisting}[language=Python, caption={Get world graph tool call}]
+# Request
+{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+        "name": "get_world_graph",
+        "arguments": {"threshold": 0.3}
+    },
+    "id": 42
+}
+
+# Response
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "content": [{
+            "type": "text",
+            "text": "{\"frame_index\": 0, \"world_context\": {\"num_nodes\": 16, \"num_edges\": 54, \"spatial_predicates\": [{\"predicate\": \"is_near\", \"source\": \"left_shoulder\", \"target\": \"left_elbow\", \"confidence\": 0.95}]}}"
+        }]
+    },
+    "id": 42
+}
+\end{lstlisting}
+
+\section{Resource Access}
+
+\begin{lstlisting}[language=Python, caption={Read robot pose resource}]
+# Request
+{
+    "jsonrpc": "2.0",
+    "method": "resources/read",
+    "params": {"uri": "robot://pose"},
+    "id": 5
+}
+
+# Response
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "contents": [{
+            "uri": "robot://pose",
+            "mimeType": "application/json",
+            "text": "{\"x\": 1.5, \"y\": 2.3, \"theta\": 0.78}"
+        }]
+    },
+    "id": 5
+}
+\end{lstlisting}
+
+\chapter{ALOHA Kinematic Chain}
+\label{app:kinematic-chain}
+
+The ALOHA robot has a bimanual configuration with the following joint structure:
+
+\begin{table}[htbp]
+\centering
+\caption{ALOHA kinematic chain (per arm)}
+\label{tab:aloha-chain}
+\begin{tabular}{clcc}
+\toprule
+\textbf{Index} & \textbf{Joint Name} & \textbf{Parent} & \textbf{Type} \\
+\midrule
+0 & waist & base & revolute \\
+1 & shoulder & waist & revolute \\
+2 & elbow & shoulder & revolute \\
+3 & forearm\_roll & elbow & revolute \\
+4 & wrist\_angle & forearm\_roll & revolute \\
+5 & wrist\_rotate & wrist\_angle & revolute \\
+6 & gripper & wrist\_rotate & prismatic \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The full robot has 14 DoF (7 per arm), with indices 0-6 for the left arm and 7-13 for the right arm.
+
+\chapter{Hyperparameters}
+\label{app:hyperparameters}
+
+\begin{table}[htbp]
+\centering
+\caption{RelationalGNN hyperparameters}
+\label{tab:hyperparameters}
+\begin{tabular}{lc}
+\toprule
+\textbf{Hyperparameter} & \textbf{Value} \\
+\midrule
+Hidden Dimension & 128 \\
+Number of GNN Layers & 3 \\
+Attention Heads & 4 \\
+Dropout & 0.1 \\
+Learning Rate (initial) & $3 \times 10^{-4}$ \\
+Learning Rate (final) & $10^{-6}$ \\
+Scheduler & Cosine Annealing \\
+Optimizer & AdamW \\
+Weight Decay & $10^{-5}$ \\
+Batch Size (RTX 500) & 16 \\
+Gradient Accumulation & 4 \\
+Mixed Precision & FP16 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\chapter{Running the Code}
+\label{app:running}
+
+\section{Installation}
+
+\begin{lstlisting}[language=bash]
+# Clone repository
+git clone https://github.com/[user]/AI2MCP.git
+cd AI2MCP
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -e ".[dev]"
+\end{lstlisting}
+
+\section{Training}
+
+\begin{lstlisting}[language=bash]
+# Train RelationalGNN on full ALOHA dataset (55k frames)
+python scripts/train_relational_gnn.py \
+    --repo lerobot/aloha_static_coffee \
+    --epochs 100 \
+    --output experiments/relational_gnn
+
+# Train MultiModalGNN on full ALOHA dataset (55k frames)
+python scripts/train_multimodal_gnn.py \
+    --repo lerobot/aloha_static_coffee \
+    --epochs 100 \
+    --output experiments/multimodal_gnn
+
+# Train ForwardDynamicsModel with RAM caching
+python scripts/train_forward_model.py \
+    --repo lerobot/aloha_static_coffee \
+    --epochs 100 \
+    --output experiments/forward_dynamics
+\end{lstlisting}
+
+\section{Running the Server}
+
+\begin{lstlisting}[language=bash]
+# Start MCP server with LeRobot integration and trained model
+python -m mcp_ros2_bridge.server --lerobot \
+    --lerobot-model experiments/relational_gnn/best_model.pt
+\end{lstlisting}
+
+\section{AI Agent Experiments}
+
+\begin{lstlisting}[language=bash]
+# Run Llama 3.2 (3B) agent via Ollama
+python scripts/run_experiment.py --agent llama --goal "Explore world graph"
+
+# Run Qwen 2.5 (3B) agent via Ollama
+python scripts/run_experiment.py --agent qwen --goal "Query world graph"
+\end{lstlisting}
+
