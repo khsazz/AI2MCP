@@ -17,7 +17,15 @@
 | **Latency** | **1.5ms** | 24ms | ✅ Kinematic (16×) |
 | **Model Size** | **0.81MB** | 2.14MB | ✅ Kinematic (2.6×) |
 | **Pass@1** | 88.2% | — | — |
-| **Llama Agent E2E** | ✅ 3 steps, 5.3s | — | — |
+
+### LLM Agent Benchmark
+
+| Metric | Llama3.2 (3B) | Qwen2.5 (3B) | Winner |
+|--------|---------------|--------------|--------|
+| **Success Rate** | 100% | 100% | TIE |
+| **Avg Steps** | 2.8 | **1.0** | ✅ Qwen |
+| **Time-to-First-Action** | **425ms** | 1073ms | ✅ Llama |
+| **Avg Total Time** | 2561ms | **1537ms** | ✅ Qwen (40% faster) |
 
 > ⚠️ **Finding**: RelationalGNN outperforms MultiModalGNN on ALL metrics. Vision integration (DINOv2) adds complexity without benefit on ALOHA — spatial predicates are solvable from joint positions alone.
 
@@ -30,7 +38,7 @@ This project implements an **MCP-to-ROS 2 Bridge** that allows any AI model (Cla
 │                        CLOUD / WORKSTATION                          │
 │  ┌───────────────┐    ┌───────────────────┐    ┌─────────────────┐  │
 │  │   LLM Agent   │◄──►│   MCP Client SDK  │◄──►│  GNN Reasoner   │  │
-│  │ (Claude/Llama)│    │   (JSON-RPC/SSE)  │    │ (World Graph)   │  │
+│  │ (Llama/Qwen)  │    │   (JSON-RPC/SSE)  │    │ (World Graph)   │  │
 │  └───────────────┘    └─────────┬─────────┘    └─────────────────┘  │
 └─────────────────────────────────┼───────────────────────────────────┘
                                   │ HTTP/SSE
@@ -50,7 +58,7 @@ This project implements an **MCP-to-ROS 2 Bridge** that allows any AI model (Cla
 ## Features
 
 - **🔌 Protocol-Driven**: Standardized MCP interface for AI-robot communication
-- **🔄 Swappable AI**: Change the "brain" (Claude ↔ Llama) without modifying robot code
+- **🔄 Swappable AI**: Change the "brain" (Llama ↔ Qwen) without modifying robot code
 - **🧠 Semantic Perception**: GNN-based world graph for structured environment understanding
 - **🤖 LeRobot Integration**: Train on HuggingFace LeRobot datasets (ALOHA, PushT, etc.)
 - **📊 Explainability**: All AI decisions logged as tool calls and resource queries
@@ -123,12 +131,11 @@ source .venv/bin/activate
 ```bash
 source .venv/bin/activate
 
-# With Claude (requires ANTHROPIC_API_KEY)
-export ANTHROPIC_API_KEY="your-key"
-python scripts/run_experiment.py --agent claude --goal "Navigate to position (3, -3)"
-
 # With Llama (requires Ollama running locally)
 python scripts/run_experiment.py --agent llama --goal "Navigate to position (3, -3)"
+
+# With Qwen (requires Ollama running locally)
+python scripts/run_experiment.py --agent qwen --goal "Navigate to position (3, -3)"
 ```
 
 #### Option C: LeRobot + Ollama Demo (No ROS required)
@@ -140,8 +147,9 @@ This is the simplest way to test the full LLM → MCP → GNN pipeline:
 # Linux
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull llama3.2 (3B, 2.0GB)
+# Pull llama3.2 (3B, 2.0GB) and/or qwen2.5 (3B, 1.9GB)
 ollama pull llama3.2
+ollama pull qwen2.5:3b
 
 # Verify
 ollama list
@@ -153,20 +161,27 @@ source .venv/bin/activate
 python -m mcp_ros2_bridge.server --lerobot
 ```
 
-**Step 3: Run Llama Agent (new terminal)**
+**Step 3: Run LLM Agent (new terminal)**
 ```bash
 source .venv/bin/activate
+
+# Llama (slightly slower, uses more steps)
 python scripts/run_experiment.py --agent llama --goal "Query world graph and report predicates"
+
+# Qwen (40% faster, fewer steps) ✅ RECOMMENDED
+python scripts/run_experiment.py --agent qwen --goal "Query world graph and report predicates"
 ```
 
 **Expected Output:**
 ```json
 {
   "success": true,
-  "total_steps": 3,
-  "duration_seconds": 5.3,
+  "total_steps": 2,
+  "duration_seconds": 1.5,
   "observation": {
-    "world_graph": {"num_nodes": 16, "num_edges": 54}
+    "world_graph": {"num_nodes": 16, "num_edges": 54},
+    "spatial_predicates": 78,
+    "interaction_predicates": 42
   }
 }
 ```
@@ -203,26 +218,28 @@ AI2MCP/
 │   │       └── scene_gnn.py        # Scene understanding
 │   │
 │   └── agents/               # Swappable AI agents
-│       ├── base_agent.py     # Abstract agent interface
-│       ├── claude_agent.py   # Anthropic Claude implementation
-│       └── llama_agent.py    # Local Llama (Ollama/vLLM)
+│       ├── base_agent.py     # Abstract agent interface + MCPClient
+│       ├── llama_agent.py    # Llama3.2 via Ollama
+│       └── qwen_agent.py     # Qwen2.5 via Ollama ✅ RECOMMENDED
 │
 ├── experiments/              # Training & benchmark results
 │   ├── aloha_training/       # Local kinematic GNN (99.4% acc, 5k frames)
 │   ├── remote_training/      # Full 55k frame training (RTX 3070)
 │   │   ├── relational_gnn/   # 97.03% acc ✅ BEST
 │   │   ├── multimodal_gnn_55k_v2/  # 96.51% acc
-│   │   ├── forward_dynamics_e2e/   # δ=0.0017
+│   │   ├── forward_dynamics_e2e/   # δ=0.0017, conf=0.49-0.62
 │   │   └── spatiotemporal_gnn/     # ~90% acc (temporal)
 │   ├── comparison_final_real/  # Fair A vs C comparison
 │   ├── ablation_depth/       # Depth noise ablation
+│   ├── agent_benchmark.json  # Llama vs Qwen results
 │   └── training/             # Synthetic baseline (95.9% acc)
 │
-├── figures/                  # Thesis figures (auto-generated)
+├── figures/                  # Thesis figures (28 PNGs, auto-generated)
 │   ├── training_curves.png   # Loss/accuracy plots
-│   ├── pass_at_k.png         # Prediction accuracy
-│   ├── classification_metrics.png
-│   └── architecture.png      # System diagram
+│   ├── architecture.png      # System diagram
+│   ├── comparison/           # A vs C comparison figures
+│   ├── forward_dynamics_*.png  # Phase 10 figures
+│   └── stgnn_*.png           # Phase 11 figures
 │
 ├── simulation/               # Gazebo simulation setup
 │   ├── launch/              # ROS 2 launch files
@@ -235,6 +252,7 @@ AI2MCP/
 │   ├── train_forward_model.py    # ForwardDynamicsModel training
 │   ├── train_spatiotemporal_gnn.py # SpatiotemporalGNN training
 │   ├── compare_models.py         # A vs C benchmark
+│   ├── benchmark_agents.py       # Llama vs Qwen agent benchmark
 │   ├── demo_lerobot_pipeline.py  # Pipeline demo
 │   ├── run_experiment.py         # LLM agent runner
 │   ├── generate_thesis_figures.py
@@ -292,9 +310,10 @@ result = await client.call_tool("simulate_action", {
 | Metric | Value |
 |--------|-------|
 | Model | ForwardDynamicsModel (259K params) |
-| Training | 55k frames, 2.3 min (RAM pre-computed) |
+| Training | 55k frames, 17 min pre-compute + 2.3 min training |
 | Inference | 41ms |
-| Delta Error | 0.0017 |
+| Delta Error | 0.0017 (1.7mm accuracy) |
+| Confidence Range | 0.49–0.62 |
 
 #### Temporal Stability (Phase 11) ✅
 
@@ -316,6 +335,15 @@ result = await client.call_tool("project_future", {
 | Training | 55k frames, 47 min |
 | Accuracy | ~90% |
 | Sequence Length | 5 frames |
+
+### Available LLM Agents
+
+| Agent | Model | Backend | Status |
+|-------|-------|---------|--------|
+| **QwenAgent** | qwen2.5:3b (1.9GB) | Ollama | ✅ **RECOMMENDED** (40% faster) |
+| LlamaAgent | llama3.2 (2.0GB) | Ollama | ✅ Validated |
+
+Both agents achieve **100% success rate** on standardized goals. Qwen uses fewer steps and is faster overall.
 
 ### Resources (State)
 
@@ -348,16 +376,20 @@ The GNN predicts 9 binary predicates:
 
 The key experiment demonstrates **swappable intelligence**:
 
-1. Run navigation task with Claude agent
-2. Run identical task with Llama agent  
+1. Run task with Llama3.2 agent
+2. Run identical task with Qwen2.5 agent  
 3. **No robot-side code changes** between runs
 
 ```bash
-# Run comparison experiment
-python scripts/run_experiment.py --agent both --goal "Explore the room"
+# Run agent benchmark (10 goals, both agents)
+python scripts/benchmark_agents.py
+
+# Or run single agent
+python scripts/run_experiment.py --agent llama --goal "Get world graph"
+python scripts/run_experiment.py --agent qwen --goal "Get world graph"
 ```
 
-Results are saved to `experiments/` for thesis analysis.
+Results are saved to `experiments/agent_benchmark.json`.
 
 ## Experiment Results
 
@@ -425,23 +457,23 @@ python scripts/generate_thesis_figures.py --output figures/
 |----------|---------|-------------|
 | `MCP_SERVER_HOST` | `0.0.0.0` | MCP server bind address |
 | `MCP_SERVER_PORT` | `8080` | MCP server port |
-| `ANTHROPIC_API_KEY` | - | Claude API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
-| `OLLAMA_MODEL` | `llama3.2` | Ollama model name (llama3.2 recommended) |
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Ollama model name (qwen2.5:3b or llama3.2) |
 
 ### Agent Configuration
 
 ```python
 from agents.base_agent import AgentConfig
-from agents.claude_agent import ClaudeAgent
+from agents.qwen_agent import QwenAgent  # or LlamaAgent
 
 config = AgentConfig(
     mcp_server_url="http://localhost:8080",
-    max_steps=50,
+    max_steps=10,
     timeout_seconds=30.0,
 )
 
-agent = ClaudeAgent(config=config, model="claude-sonnet-4-20250514")
+agent = QwenAgent(config=config, model="qwen2.5:3b")  # ✅ RECOMMENDED
+# or: agent = LlamaAgent(config=config, model="llama3.2")
 ```
 
 ## Development
@@ -557,10 +589,11 @@ python scripts/ablation_depth_noise.py --frames 200 --output experiments/ablatio
 3. **Semantic Perception**: GNN-processed world graphs with 97% predicate accuracy
 4. **Protocol-Driven Robotics**: Foundation for multi-robot, multi-agent systems
 5. **LeRobot Integration**: First MCP bridge for HuggingFace robotics datasets
-6. **Swappable AI Validated**: Llama3.2 → MCP → GNN E2E (3 steps, 5.3s)
+6. **Swappable AI Validated**: Llama3.2 + Qwen2.5 → MCP → GNN E2E (100% success rate)
 7. **Pre-Execution Simulation**: ForwardDynamicsModel for LLM plan verification before physical execution
 8. **Fair Architecture Comparison**: RelationalGNN vs MultiModalGNN on 55k frames — kinematic wins
 9. **Temporal Predicate Stability**: SpatiotemporalGNN with GRU eliminates frame-to-frame flicker (~90% acc)
+10. **Agent Benchmark**: Qwen 40% faster than Llama, 65% fewer steps to complete tasks
 
 ## Citation
 
