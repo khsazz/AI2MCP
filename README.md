@@ -8,26 +8,28 @@
 
 > **Thesis Project**: Demonstrating that robotic intelligence can be treated as a swappable service using the Model Context Protocol (MCP).
 
-## Key Results (Fair Comparison, 55k frames)
+## Key Results
 
-| Metric | RelationalGNN | MultiModalGNN | Winner |
-|--------|---------------|---------------|--------|
-| **Accuracy** | **97.03%** | 96.51% | ✅ Kinematic |
-| **`is_near` F1** | **0.954** | 0.920 | ✅ Kinematic |
-| **Latency** | **1.5ms** | 24ms | ✅ Kinematic (16×) |
-| **Model Size** | **0.81MB** | 2.14MB | ✅ Kinematic (2.6×) |
-| **Pass@1** | 88.2% | — | — |
+### GNN Architecture Comparison (55k training frames)
 
-### LLM Agent Benchmark
+| Metric | RelationalGNN | MultiModalGNN |
+|--------|---------------|---------------|
+| Accuracy | **97.03%** | 96.51% |
+| `is_near` F1 | **0.954** | 0.920 |
+| Latency | **1.5ms** | 24ms |
+| Model Size | **0.81MB** | 2.14MB |
+| Pass@1 | 88.2% | — |
 
-| Metric | Llama3.2 (3B) | Qwen2.5 (3B) | Winner |
-|--------|---------------|--------------|--------|
-| **Success Rate** | 100% | 100% | TIE |
-| **Avg Steps** | 2.8 | **1.0** | ✅ Qwen |
-| **Time-to-First-Action** | **425ms** | 1073ms | ✅ Llama |
-| **Avg Total Time** | 2561ms | **1537ms** | ✅ Qwen (40% faster) |
+### LLM Agent Comparison
 
-> ⚠️ **Finding**: RelationalGNN outperforms MultiModalGNN on ALL metrics. Vision integration (DINOv2) adds complexity without benefit on ALOHA — spatial predicates are solvable from joint positions alone.
+| Metric | Llama3.2 (3B) | Qwen2.5 (3B) |
+|--------|---------------|--------------|
+| Success Rate | 100% | 100% |
+| Avg Steps | 2.8 | **1.0** |
+| Time-to-First-Action | **425ms** | 1073ms |
+| Avg Total Time | 2561ms | **1537ms** |
+
+> **Note**: RelationalGNN outperforms MultiModalGNN on all evaluated metrics. On ALOHA-style datasets, spatial predicates are fully determined by joint kinematics, making vision integration unnecessary.
 
 ## Overview
 
@@ -57,15 +59,15 @@ This project implements an **MCP-to-ROS 2 Bridge** that allows any AI model (Cla
 
 ## Features
 
-- **🔌 Protocol-Driven**: Standardized MCP interface for AI-robot communication
-- **🔄 Swappable AI**: Change the "brain" (Llama ↔ Qwen) without modifying robot code
-- **🧠 Semantic Perception**: GNN-based world graph for structured environment understanding
-- **🤖 LeRobot Integration**: Train on HuggingFace LeRobot datasets (ALOHA, PushT, etc.)
-- **📊 Explainability**: All AI decisions logged as tool calls and resource queries
-- **☁️ Cloud-Edge Split**: Heavy compute on cloud, lightweight execution on robot
-- **📈 Predicate Prediction**: 9 spatial/interaction predicates with 97% accuracy
-- **🔮 Pre-Execution Simulation**: ForwardDynamicsModel verifies LLM plans before execution
-- **⏱️ Temporal Stability**: SpatiotemporalGNN with GRU eliminates predicate flicker
+- **Protocol-Driven Architecture**: Standardized MCP interface for AI-robot communication
+- **Swappable AI Models**: Change the LLM backend without modifying robot code
+- **Semantic Scene Understanding**: GNN-based world graph with relational predicates
+- **LeRobot Integration**: Compatible with HuggingFace LeRobot datasets (ALOHA, PushT, etc.)
+- **Explainable Decisions**: All AI actions logged as structured tool calls
+- **Cloud-Edge Architecture**: Heavy inference on cloud, lightweight execution on robot
+- **Predicate Prediction**: 9 spatial/interaction predicates with 97% accuracy
+- **Pre-Execution Simulation**: ForwardDynamicsModel verifies action feasibility
+- **Temporal Stability**: SpatiotemporalGNN with GRU for consistent predictions
 
 ## Quick Start
 
@@ -165,10 +167,10 @@ python -m mcp_ros2_bridge.server --lerobot
 ```bash
 source .venv/bin/activate
 
-# Llama (slightly slower, uses more steps)
+# Using Llama
 python scripts/run_experiment.py --agent llama --goal "Query world graph and report predicates"
 
-# Qwen (40% faster, fewer steps) ✅ RECOMMENDED
+# Using Qwen
 python scripts/run_experiment.py --agent qwen --goal "Query world graph and report predicates"
 ```
 
@@ -211,8 +213,8 @@ AI2MCP/
 │   │   ├── camera.py         # Camera intrinsics & 3D projection
 │   │   ├── graph_builder.py  # Sensor → World Graph
 │   │   └── model/            # PyTorch Geometric GNN
-│   │       ├── relational_gnn.py   # Kinematic GNN (97.03% acc) ✅ RECOMMENDED
-│   │       ├── multimodal_gnn.py   # Vision+Kinematic GNN (96.51% acc)
+│   │       ├── relational_gnn.py   # Kinematic GNN (97.03% accuracy)
+│   │       ├── multimodal_gnn.py   # Vision+Kinematic GNN (96.51% accuracy)
 │   │       ├── forward_dynamics.py # Pre-execution simulation (259K params)
 │   │       ├── spatiotemporal_gnn.py # Temporal stability (~90% acc)
 │   │       └── scene_gnn.py        # Scene understanding
@@ -220,16 +222,16 @@ AI2MCP/
 │   └── agents/               # Swappable AI agents
 │       ├── base_agent.py     # Abstract agent interface + MCPClient
 │       ├── llama_agent.py    # Llama3.2 via Ollama
-│       └── qwen_agent.py     # Qwen2.5 via Ollama ✅ RECOMMENDED
+│       └── qwen_agent.py     # Qwen2.5 via Ollama
 │
 ├── experiments/              # Training & benchmark results
 │   ├── aloha_training/       # Local kinematic GNN (99.4% acc, 5k frames)
 │   ├── remote_training/      # Full 55k frame training (RTX 3070)
-│   │   ├── relational_gnn/   # 97.03% acc ✅ BEST
+│   │   ├── relational_gnn/   # 97.03% accuracy
 │   │   ├── multimodal_gnn_55k_v2/  # 96.51% acc
 │   │   ├── forward_dynamics_e2e/   # δ=0.0017, conf=0.49-0.62
 │   │   └── spatiotemporal_gnn/     # ~90% acc (temporal)
-│   ├── comparison_final_real/  # Fair A vs C comparison
+│   ├── comparison_final_real/  # Architecture comparison results
 │   ├── ablation_depth/       # Depth noise ablation
 │   ├── agent_benchmark.json  # Llama vs Qwen results
 │   └── training/             # Synthetic baseline (95.9% acc)
@@ -238,8 +240,8 @@ AI2MCP/
 │   ├── training_curves.png   # Loss/accuracy plots
 │   ├── architecture.png      # System diagram
 │   ├── comparison/           # A vs C comparison figures
-│   ├── forward_dynamics_*.png  # Phase 10 figures
-│   └── stgnn_*.png           # Phase 11 figures
+│   ├── forward_dynamics_*.png  # Pre-execution simulation figures
+│   └── stgnn_*.png           # Spatiotemporal GNN figures
 │
 ├── simulation/               # Gazebo simulation setup
 │   ├── launch/              # ROS 2 launch files
@@ -290,9 +292,9 @@ AI2MCP/
 | `set_frame(index)` | Jump to specific frame |
 | `get_predicates(threshold)` | Get active spatial/interaction predicates |
 | `simulate_action(action_sequence, confidence_threshold)` | Pre-execution verification |
-| `project_future(action, horizon_steps)` | **NEW** Temporal predicate projection |
+| `project_future(action, horizon_steps)` | Temporal predicate projection |
 
-#### Pre-Execution Simulation (Phase 10) ✅
+#### Pre-Execution Simulation
 
 The `simulate_action` tool enables LLM agents to **verify plans before physical execution**:
 
@@ -315,7 +317,7 @@ result = await client.call_tool("simulate_action", {
 | Delta Error | 0.0017 (1.7mm accuracy) |
 | Confidence Range | 0.49–0.62 |
 
-#### Temporal Stability (Phase 11) ✅
+#### Temporal Predicate Projection
 
 The `project_future` tool uses SpatiotemporalGNN to **predict future predicates**:
 
@@ -336,14 +338,14 @@ result = await client.call_tool("project_future", {
 | Accuracy | ~90% |
 | Sequence Length | 5 frames |
 
-### Available LLM Agents
+### Supported LLM Agents
 
-| Agent | Model | Backend | Status |
-|-------|-------|---------|--------|
-| **QwenAgent** | qwen2.5:3b (1.9GB) | Ollama | ✅ **RECOMMENDED** (40% faster) |
-| LlamaAgent | llama3.2 (2.0GB) | Ollama | ✅ Validated |
+| Agent | Model | Backend | Size |
+|-------|-------|---------|------|
+| QwenAgent | qwen2.5:3b | Ollama | 1.9GB |
+| LlamaAgent | llama3.2 | Ollama | 2.0GB |
 
-Both agents achieve **100% success rate** on standardized goals. Qwen uses fewer steps and is faster overall.
+Both agents achieve 100% success rate on the evaluation benchmark.
 
 ### Resources (State)
 
@@ -472,7 +474,7 @@ config = AgentConfig(
     timeout_seconds=30.0,
 )
 
-agent = QwenAgent(config=config, model="qwen2.5:3b")  # ✅ RECOMMENDED
+agent = QwenAgent(config=config, model="qwen2.5:3b")
 # or: agent = LlamaAgent(config=config, model="llama3.2")
 ```
 
@@ -496,11 +498,11 @@ ruff format src/
 
 | Issue | Status | Workaround |
 |-------|--------|------------|
-| MCP SSE resource transport bug | ⚠️ Library bug | Agent uses tool results instead of resources |
-| LLM sends string numbers (`"0"` vs `0`) | ✅ Fixed | Auto-coerced in `MCPClient.call_tool()` |
-| Llama 3B loops on complex prompts | ✅ Fixed | Simplified system prompt with explicit rules |
-| ZoeDepth installation (timm version) | ⚠️ | Falls back to MiDaS (relative depth only) |
-| `is_holding`/`is_contacting` = 0.000 F1 | ⚠️ Data limitation | ALOHA lacks contact annotations |
+| MCP SSE resource transport bug | Open (library) | Agent uses tool results instead of resources |
+| LLM sends string numbers (`"0"` vs `0`) | Resolved | Auto-coerced in `MCPClient.call_tool()` |
+| Llama 3B loops on complex prompts | Resolved | Simplified system prompt with explicit rules |
+| ZoeDepth installation (timm version) | Open | Falls back to MiDaS (relative depth only) |
+| `is_holding`/`is_contacting` = 0.000 F1 | Data limitation | ALOHA lacks contact annotations |
 
 ### Contact Predicates Limitation
 
@@ -517,7 +519,7 @@ ruff format src/
 
 This project includes two approaches for integrating visual object detection with the kinematic GNN:
 
-### Option A: RelationalGNN (Kinematic + Geometric Fusion) ✅ RECOMMENDED
+### Option A: RelationalGNN (Kinematic + Geometric Fusion)
 ```
 JointState → Graph → RelationalGNN → Predicates
 (Optional) Image → GroundingDINO → Depth → 3D Objects → Graph
@@ -534,17 +536,17 @@ Image → DINOv2 → RoI Pool → Cross-Attention → MultiModalGNN
 - **Accuracy:** 96.51%
 - **Best for:** Datasets where objects are NOT encoded in kinematics
 
-### Fair Comparison Results (55k vs 55k frames)
+### Architecture Comparison (55k training frames each)
 
-| Metric | Option A | Option C | Winner |
-|--------|----------|----------|--------|
-| Micro Accuracy | **97.03%** | 96.51% | **A (+0.5%)** |
-| Macro F1 | **0.358** | 0.348 | **A (+2.9%)** |
-| `is_near` F1 | **0.954** | 0.920 | **A** |
-| `is_approaching` F1 | **0.182** | 0.156 | **A** |
-| Latency | **1.5ms** | 24ms | **A (16× faster)** |
-| Peak Memory | **19.4MB** | 141.8MB | **A (7× less)** |
-| Model Size | **0.81MB** | 2.14MB | **A (2.6× smaller)** |
+| Metric | Option A | Option C |
+|--------|----------|----------|
+| Micro Accuracy | **97.03%** | 96.51% |
+| Macro F1 | **0.358** | 0.348 |
+| `is_near` F1 | **0.954** | 0.920 |
+| `is_approaching` F1 | **0.182** | 0.156 |
+| Latency | **1.5ms** | 24ms |
+| Peak Memory | **19.4MB** | 141.8MB |
+| Model Size | **0.81MB** | 2.14MB |
 
 ### Honest E2E Latency (Real Vision on RTX 3070)
 
@@ -555,7 +557,7 @@ Image → DINOv2 → RoI Pool → Cross-Attention → MultiModalGNN
 | GNN inference | 1.4ms |
 | **Total E2E** | **297-332ms** |
 
-> ⚠️ **Note**: The 2.4ms latency previously reported was with **mock detectors**. Real vision adds ~300ms.
+> **Note**: The 2.4ms latency previously reported was measured with mock detectors. Real vision pipelines add approximately 300ms.
 
 ```bash
 # Train MultiModalGNN
@@ -584,16 +586,15 @@ python scripts/ablation_depth_noise.py --frames 200 --output experiments/ablatio
 
 ## Research Contributions
 
-1. **N×M → N+M Complexity**: Single MCP interface per robot connects to any model
-2. **Explainable Robot AI**: All decisions logged as structured tool calls
-3. **Semantic Perception**: GNN-processed world graphs with 97% predicate accuracy
-4. **Protocol-Driven Robotics**: Foundation for multi-robot, multi-agent systems
+1. **Complexity Reduction**: Single MCP interface per robot enables N+M integration instead of N×M
+2. **Explainable Decisions**: All robot actions logged as structured tool calls
+3. **Semantic Scene Understanding**: GNN-processed world graphs with 97% predicate accuracy
+4. **Protocol-Driven Architecture**: Foundation for multi-robot, multi-agent systems
 5. **LeRobot Integration**: First MCP bridge for HuggingFace robotics datasets
-6. **Swappable AI Validated**: Llama3.2 + Qwen2.5 → MCP → GNN E2E (100% success rate)
-7. **Pre-Execution Simulation**: ForwardDynamicsModel for LLM plan verification before physical execution
-8. **Fair Architecture Comparison**: RelationalGNN vs MultiModalGNN on 55k frames — kinematic wins
-9. **Temporal Predicate Stability**: SpatiotemporalGNN with GRU eliminates frame-to-frame flicker (~90% acc)
-10. **Agent Benchmark**: Qwen 40% faster than Llama, 65% fewer steps to complete tasks
+6. **Model Interchangeability**: Validated with multiple LLM backends (Llama3.2, Qwen2.5)
+7. **Pre-Execution Simulation**: ForwardDynamicsModel for action feasibility verification
+8. **Architecture Comparison**: Systematic evaluation of RelationalGNN vs MultiModalGNN
+9. **Temporal Stability**: SpatiotemporalGNN with GRU for consistent predicate predictions
 
 ## Citation
 
@@ -603,7 +604,7 @@ python scripts/ablation_depth_noise.py --frames 200 --output experiments/ablatio
          Intelligence using the Model Context Protocol},
   author={Sazzad, Khaled},
   year={2025},
-  school={Your University}
+  school={Friedrich Alexander University Erlangen-Nuremberg}
 }
 ```
 
