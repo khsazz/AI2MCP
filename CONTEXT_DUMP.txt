@@ -913,7 +913,7 @@ working_dir: /proj/ciptmp/xi58pizy/AI2MCP
 
 training_results:
   relational_gnn:
-    status: ✅ COMPLETE
+status: ✅ COMPLETE
     accuracy: 98.96%
     epochs: 100
     training_time: ~29 min

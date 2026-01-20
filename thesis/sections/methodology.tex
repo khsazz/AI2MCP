@@ -115,15 +115,22 @@ To mitigate predicate flickering caused by sensor noise, we implement a \textbf{
     \label{fig:stgnn}
 \end{figure}
 
-\section{Methodological Comparison: Option A vs. Option C}
+\section{Methodological Comparison: Kinematic-GNN vs. Multimodal-GNN}
 \label{sec:architecture-comparison}
 
-We compare kinematic-geometric reasoning (\textbf{Option A}) with multimodal fusion (\textbf{Option C}) which utilizes visual features via a DINOv2 backbone. As shown in \Cref{fig:design_latency}, Option A's $16\times$ speed advantage justifies its selection for real-time control.
+We compare the baseline kinematic-geometric reasoning architecture (\textbf{Kinematic-GNN}) with a vision-augmented architecture (\textbf{Multimodal-GNN}) which utilizes visual features via a DINOv2 backbone.
+
+\begin{description}
+    \item[Kinematic-GNN] Relies exclusively on 14-DoF joint states and geometric projection. This lightweight approach assumes objects can be localized via standard detection or known poses.
+    \item[Multimodal-GNN] Fuses visual embeddings from a pre-trained Vision Transformer (DINOv2) with kinematic node features via cross-attention. This aims to capture visual context not present in the joint state.
+\end{description}
+
+As shown in \Cref{fig:design_latency}, the Kinematic-GNN's $16\times$ speed advantage justifies its selection for real-time control.
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\textwidth]{figures/inference_latency.png}
-    \caption{Methodological Latency Analysis: Option A achieves 1.5ms inference vs. 24ms for Option C, enabling control loops at 600+ Hz.}
+    \caption{Methodological Latency Analysis: Kinematic-GNN achieves 1.5ms inference vs. 24ms for Multimodal-GNN, enabling control loops at 600+ Hz.}
     \label{fig:design_latency}
 \end{figure}
 
@@ -168,7 +175,7 @@ The RelationalGNN predicts nine binary predicates organized into two categories.
 \section{Training Objective and Heuristic Labeling}
 \label{sec:training-objective}
 
-We train with multi-label binary cross-entropy loss over all nine predicates. Since the ALOHA dataset lacks annotations, labels are generated heuristically based on kinematic thresholds \cite{zuo_graph-based_2021, zhou_multi-robot_2022, wang_research_2025}. To handle the 55,000-frame dataset, we implement \textbf{RAM Pre-computation}, achieving a \textbf{730$\times$ speedup} in training efficiency.
+We train with \textbf{Weighted Focal Loss} over all nine predicates to address the extreme class imbalance ($\sim$95\% negative labels). The focal modulating factor $(1 - p_t)^\gamma$ down-weights easy negatives, forcing the model to focus on ambiguous interaction edges. Since the ALOHA dataset lacks annotations, labels are generated heuristically based on kinematic thresholds \cite{zuo_graph-based_2021, zhou_multi-robot_2022, wang_research_2025}. To handle the 55,000-frame dataset, we implement \textbf{RAM Pre-computation}, achieving a \textbf{730$\times$ speedup} in training efficiency.
 
 \section{Agent Reasoning and Benchmarking Methodology}
 \label{sec:agent-benchmarking}

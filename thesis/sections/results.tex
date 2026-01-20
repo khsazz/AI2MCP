@@ -51,18 +51,18 @@ Recall & --- & 99.54\% \\
 The \textbf{+10.8\%} improvement in Pass@1 and \textbf{+13.0\%} improvement in F1 score demonstrate the importance of training on the full dataset rather than subsets. These results validate the architecture's capacity for high-fidelity relational reasoning when provided with sufficient training data.
 
 \subsection{Radar-Based Multi-Axis Comparison}
-To emphasize the architectural advantages of a protocol-driven GNN over heavy multimodal stacks, we utilize a radar chart to compare Option A (RelationalGNN) and Option C (MultiModalGNN).
+To emphasize the architectural advantages of a protocol-driven GNN over heavy multimodal stacks, we utilize a radar chart to compare the Kinematic-GNN and the Multimodal-GNN.
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.7\textwidth]{figures/radar_comparison.png}
-    \caption{Radar chart evaluating the trade-offs between kinematic reasoning (A) and multimodal fusion (C). Option A dominates on latency, memory, and model size.}
+    \caption{Radar chart evaluating the trade-offs between kinematic reasoning and multimodal fusion. The Kinematic-GNN dominates on latency, memory, and model size.}
     \label{fig:radar-comparison}
 \end{figure}
 
 \section{Detailed Comparative Metrics}
 
-\subsection{Fair Architecture Comparison (Option A vs. C)}
+\subsection{Fair Architecture Comparison (Kinematic vs. Multimodal)}
 Following a fair comparison on the full 55,000-frame dataset, it was observed that vision-augmented features (DINOv2) did not improve spatial predicate accuracy in the structured ALOHA environment. Table~\ref{tab:fair-comparison} summarizes these results.
 
 \begin{table}[htbp]
@@ -71,13 +71,13 @@ Following a fair comparison on the full 55,000-frame dataset, it was observed th
 \label{tab:fair-comparison}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Metric} & \textbf{RelationalGNN (A)} & \textbf{MultiModalGNN (C)} & \textbf{Winner} \\
+\textbf{Metric} & \textbf{Kinematic-GNN} & \textbf{Multimodal-GNN} & \textbf{Winner} \\
 \midrule
-Micro Accuracy & \textbf{97.03\%} & 96.51\% & A \\
-Macro F1 Score & \textbf{0.358} & 0.348 & A \\
-Inference Latency & \textbf{1.52ms} & 24.29ms & A ($16\times$) \\
-Peak Memory (MB) & \textbf{19.4} & 141.8 & A ($7\times$) \\
-Model Size (MB) & \textbf{0.81} & 2.14 & A \\
+Micro Accuracy & \textbf{97.03\%} & 96.51\% & Kinematic \\
+Macro F1 Score & \textbf{0.358} & 0.348 & Kinematic \\
+Inference Latency & \textbf{1.52ms} & 24.29ms & Kinematic ($16\times$) \\
+Peak Memory (MB) & \textbf{19.4} & 141.8 & Kinematic ($7\times$) \\
+Model Size (MB) & \textbf{0.81} & 2.14 & Kinematic \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -158,7 +158,7 @@ As visualized in \Cref{fig:pass-at_k}, the GNN reasoner achieves \textbf{99.0\% 
 \begin{itemize}
     \item \textbf{Relational Fidelity}: 99.0\% Pass@1, 95.2\% F1 in spatial predicate reasoning from kinematics (97.03\% training accuracy).
     \item \textbf{Decoupling Success}: Swappable LLM agents (Llama and Qwen) achieved 100\% success rate in 1.5--2.6s cycles.
-    \item \textbf{Computational Advantage}: RelationalGNN is $16\times$ faster and $7\times$ leaner than vision-fusion alternatives.
+    \item \textbf{Computational Advantage}: Kinematic-GNN is $16\times$ faster and $7\times$ leaner than vision-fusion alternatives.
     \item \textbf{Safety Assurance}: Protocol-level verification via forward dynamics rollouts achieved a prediction error of $\delta = 0.0017$.
     \item \textbf{Training Scale Impact}: Full 55k-frame training improved Pass@1 by +10.8\% and F1 by +13.0\% over local 5k-frame baselines.
 \end{itemize}
