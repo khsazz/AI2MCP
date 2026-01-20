@@ -10,7 +10,7 @@
 
 **Title**: A Standardized Middleware Architecture for Decoupled Robotic Intelligence using the Model Context Protocol (MCP)
 
-**Core Thesis Claim**: Robotic intelligence can be treated as a swappable service—change the AI "brain" (Claude ↔ Llama) without modifying robot code.
+**Core Thesis Claim**: Robotic intelligence can be treated as a swappable service—change the AI "brain" (Llama ↔ Qwen) without modifying robot code.
 
 **Key Results Achieved** (Final, Fair Comparison):
 | Metric | Value | Status |
@@ -217,10 +217,18 @@
 
 **Key Thesis Claims**:
 - MCP solves N×M integration problem
-- GNN provides structured relational understanding (98.99% pass@1, 95.15% F1)
-- ⚠️ Vision integration does NOT improve accuracy (RelationalGNN wins)
+- GNN provides structured relational understanding (**99.0% pass@1**, **95.2% F1**)
+- Vision integration does NOT improve accuracy (RelationalGNN wins)
 - Swappable AI brain validated (Llama3.2 + Qwen2.5 → MCP → GNN E2E)
 - Real-time viable: 17.8ms inference latency (mean)
+
+**Benchmark Improvement (Local → Remote-Trained Model)**:
+| Metric | Old (Local) | New (Remote) | Improvement |
+|--------|-------------|--------------|-------------|
+| pass@1 | 88.17% | **98.99%** | +10.8% |
+| pass@3 | 98.16% | 99.95% | +1.8% |
+| Accuracy | 92.48% | **98.45%** | +6.0% |
+| F1 | 82.12% | **95.15%** | +13.0% |
 
 ---
 

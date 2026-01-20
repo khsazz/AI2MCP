@@ -18,7 +18,7 @@
 | `is_near` F1 | **0.954** | 0.920 |
 | Latency | **1.5ms** | 24ms |
 | Model Size | **0.81MB** | 2.14MB |
-| Pass@1 | 88.2% | — |
+| Pass@1 | **99.0%** | — |
 
 ### LLM Agent Comparison
 
@@ -408,21 +408,21 @@ Results are saved to `experiments/agent_benchmark.json`.
 
 > **Note**: The 5k-frame local training shows higher accuracy (99.4%) than 55k remote (97.03%) due to overfitting on the smaller dataset. The 55k results are more representative.
 
-### Inference Benchmark (200 frames, trained model)
+### Inference Benchmark (500 frames, remote-trained model)
 
 | Metric | Value |
 |--------|-------|
-| Predicate Accuracy | 92.5% |
-| Precision | 84.5% |
-| Recall | 79.9% |
-| F1 Score | 82.1% |
-| Pass@1 | 88.2% |
-| Pass@3 | 98.2% |
-| Inference Latency (mean) | 12.6ms |
-| Inference Latency (p95) | 12.7ms |
-| Graph Construction | 1.7ms |
-| Serialization | 0.15ms |
-| Protocol Overhead | 30.4% |
+| Predicate Accuracy | **98.5%** |
+| Precision | 91.1% |
+| Recall | 99.5% |
+| F1 Score | **95.2%** |
+| Pass@1 | **99.0%** |
+| Pass@3 | 100.0% |
+| Inference Latency (mean) | 17.8ms |
+| Inference Latency (p95) | 32.2ms |
+| Graph Construction | 4.1ms |
+| Serialization | 0.26ms |
+| Protocol Overhead | 58.4% |
 
 ### Predicate Distribution (200 frames)
 

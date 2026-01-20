@@ -18,7 +18,7 @@ Evaluations were benchmarked on two primary profiles: a high-performance develop
 \section{Relational Reasoning Performance}
 
 \subsection{Global Predicate Accuracy}
-The RelationalGNN reasoning engine achieved a validation accuracy of \textbf{97.03\%}. As illustrated in \Cref{fig:training-curves}, the model exhibits rapid convergence with minimal loss variance, reaching optimal performance by epoch 69.
+The RelationalGNN reasoning engine achieved a validation accuracy of \textbf{97.03\%} during training. As illustrated in \Cref{fig:training-curves}, the model exhibits rapid convergence with minimal loss variance, reaching optimal performance by epoch 69.
 
 \begin{figure}[htbp]
     \centering
@@ -26,6 +26,29 @@ The RelationalGNN reasoning engine achieved a validation accuracy of \textbf{97.
     \caption{RelationalGNN training on 55,000 ALOHA frames showing high stability in both loss convergence and micro-accuracy.}
     \label{fig:training-curves}
 \end{figure}
+
+\subsection{Inference Benchmark Results}
+The trained RelationalGNN was evaluated on a 500-frame holdout set, demonstrating substantial improvements over locally-trained baselines. Table~\ref{tab:inference-benchmark} summarizes the inference performance.
+
+\begin{table}[htbp]
+\centering
+\caption{Inference Benchmark Results (500 frames, remote-trained model)}
+\label{tab:inference-benchmark}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric} & \textbf{Local (5k frames)} & \textbf{Remote (55k frames)} \\
+\midrule
+Pass@1 & 88.17\% & \textbf{98.99\%} \\
+Pass@3 & 98.16\% & \textbf{99.95\%} \\
+Predicate Accuracy & 92.48\% & \textbf{98.45\%} \\
+Predicate F1 & 82.12\% & \textbf{95.15\%} \\
+Precision & --- & 91.13\% \\
+Recall & --- & 99.54\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \textbf{+10.8\%} improvement in Pass@1 and \textbf{+13.0\%} improvement in F1 score demonstrate the importance of training on the full dataset rather than subsets. These results validate the architecture's capacity for high-fidelity relational reasoning when provided with sufficient training data.
 
 \subsection{Radar-Based Multi-Axis Comparison}
 To emphasize the architectural advantages of a protocol-driven GNN over heavy multimodal stacks, we utilize a radar chart to compare Option A (RelationalGNN) and Option C (MultiModalGNN).
@@ -122,19 +145,20 @@ Time to First Token (ms) & \textbf{425} & 1073 \\
 \end{tabular}
 \end{table}
 
-As visualized in \Cref{fig:pass-at_k}, the agents navigated the world graph with varying efficiencies. We report $Pass@1$ (single-attempt success rate) for all goals. While Llama 3.2 demonstrated faster initial response times (time-to-first-token), Qwen 2.5 was \textbf{40\% faster overall} and utilized \textbf{65\% fewer steps} to reach task completion.
+As visualized in \Cref{fig:pass-at_k}, the GNN reasoner achieves \textbf{99.0\% Pass@1} and approaches 100\% at higher $k$ values. While Llama 3.2 demonstrated faster initial response times (time-to-first-token), Qwen 2.5 was \textbf{40\% faster overall} and utilized \textbf{65\% fewer steps} to reach task completion.
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.7\textwidth]{figures/pass_at_k.png}
-    \caption{Pass@k analysis demonstrating swappable intelligence via the standardized MCP bridge.}
+    \caption{Pass@k analysis showing 99.0\% single-attempt success rate, validating swappable intelligence via the standardized MCP bridge.}
     \label{fig:pass-at_k}
 \end{figure}
 
 \section{Key Results Summary}
 \begin{itemize}
-    \item \textbf{Relational Fidelity}: 97.03\% accuracy in spatial reasoning from kinematics.
+    \item \textbf{Relational Fidelity}: 99.0\% Pass@1, 95.2\% F1 in spatial predicate reasoning from kinematics (97.03\% training accuracy).
     \item \textbf{Decoupling Success}: Swappable LLM agents (Llama and Qwen) achieved 100\% success rate in 1.5--2.6s cycles.
     \item \textbf{Computational Advantage}: RelationalGNN is $16\times$ faster and $7\times$ leaner than vision-fusion alternatives.
     \item \textbf{Safety Assurance}: Protocol-level verification via forward dynamics rollouts achieved a prediction error of $\delta = 0.0017$.
+    \item \textbf{Training Scale Impact}: Full 55k-frame training improved Pass@1 by +10.8\% and F1 by +13.0\% over local 5k-frame baselines.
 \end{itemize}

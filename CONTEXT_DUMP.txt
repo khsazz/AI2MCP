@@ -273,6 +273,14 @@ predicate_classification:
 
 benchmark_file: experiments/benchmark_remote_model.json
 
+benchmark_improvement_summary:
+  # Comparison: Local (5k frames) vs Remote-Trained (55k frames)
+  pass@1: 88.17% → 98.99% (+10.8%)
+  pass@3: 98.16% → 99.95% (+1.8%)
+  predicate_accuracy: 92.48% → 98.45% (+6.0%)
+  predicate_f1: 82.12% → 95.15% (+13.0%)
+  figures_updated: true
+
 [MCP_E2E_DEMO_RESULTS]
 tools_discovered: 13
 resources_discovered: 13
@@ -491,9 +499,9 @@ chapters:
 key_thesis_claims:
   - MCP solves N×M integration problem
   - GNN provides structured relational understanding
-  - 99.4% predicate accuracy demonstrates viability (kinematic only)
-  - 16.9 ops/sec sufficient for interactive control
-  - Protocol overhead minimal (~0.6ms serialization)
+  - 99.0% pass@1, 95.2% F1 demonstrates viability (remote-trained model)
+  - 17.8ms mean inference latency (real-time viable)
+  - Protocol overhead ~58% (includes dataset I/O)
   - ⚠️ REVISED: Vision integration does NOT improve accuracy on ALOHA dataset
     - Previous claim: +35.6% is_near (0.668 → 0.906) was before WeightedFocalLoss fix
     - Current result: RelationalGNN BEATS MultiModalGNN (0.954 vs 0.920)
