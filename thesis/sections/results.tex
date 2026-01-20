@@ -71,19 +71,20 @@ Following a fair comparison on the full 55,000-frame dataset, it was observed th
 \label{tab:fair-comparison}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Metric} & \textbf{Kinematic-GNN} & \textbf{Multimodal-GNN} & \textbf{Winner} \\
+\textbf{Metric} & \textbf{Kinematic-GNN (A)} & \textbf{Multimodal-GNN (C)} & \textbf{Winner} \\
 \midrule
-Micro Accuracy & \textbf{97.03\%} & 96.51\% & Kinematic \\
-Macro F1 Score & \textbf{0.358} & 0.348 & Kinematic \\
-Inference Latency & \textbf{1.52ms} & 24.29ms & Kinematic ($16\times$) \\
-Peak Memory (MB) & \textbf{19.4} & 141.8 & Kinematic ($7\times$) \\
-Model Size (MB) & \textbf{0.81} & 2.14 & Kinematic \\
+Micro Accuracy & \textbf{97.03\%} & 96.51\% & \textbf{A} \\
+Inference Latency & \textbf{1.52ms} & 24.29ms & \textbf{A ($16\times$)} \\
+Peak Memory (MB) & \textbf{19.4} & 141.8 & \textbf{A ($7\times$)} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+\subsection{Perception Bottlenecks}
+While the MCP overhead is minimal (0.6ms), the honest E2E latency (297--332ms) is dominated by visual detection (234ms), establishing a real-world stability ceiling for protocol-driven control.
+
 \subsection{Per-Predicate Distribution and the Interaction Gap}
-Detailed analysis of the predicate distribution reveals high fidelity in spatial predicates like \texttt{is\_near} (F1: 0.954) and \texttt{is\_left\_of} (F1: 0.969). However, an ``Interaction Predicate Gap'' exists for contact-based predicates (\texttt{is\_holding}), which reported 0.000 F1 on real data due to a lack of annotated contact signals in the kinematic stream.
+Detailed analysis of the predicate distribution reveals high fidelity in spatial predicates like \texttt{is\_near} (F1: 0.954) and \texttt{is\_left\_of} (F1: 0.969). However, an ``Interaction Predicate Gap'' exists for contact-based predicates (\texttt{is\_holding}), which reported 0.000 F1 on real data due to a lack of annotated contact signals in the kinematic stream. Notably, when trained on synthetic data with augmented holding scenarios, the architecture achieved an F1 of \textbf{0.914} for \texttt{is\_holding}, demonstrating that the limitation is driven by dataset characteristics rather than architectural deficiency.
 
 \section{System Performance and Scalability}
 
@@ -120,7 +121,7 @@ To mitigate predicate ``flickering'' across consecutive frames, a Spatiotemporal
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\textwidth]{figures/phase_10_11_summary.png}
-    \caption{Summary of predictive stability and dynamics performance across Phase 10 and 11.}
+    \caption{Summary of predictive stability and dynamics performance across the proposed temporal reasoning architectures.}
     \label{fig:phase-summary}
 \end{figure}
 

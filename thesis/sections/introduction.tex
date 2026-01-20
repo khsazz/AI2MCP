@@ -15,7 +15,7 @@ For every individual model-robot interaction, this divergence necessitates custo
 
 This thesis investigates a fundamental challenge in robotic interoperability through the following research question:
 \begin{quote}
-\textit{Can a standardized middleware protocol effectively decouple robotic intelligence from hardware, allowing diverse AI models to control robotic systems through a unified interface while maintaining the real-time performance required for embodied, physically grounded interaction?}
+\textit{Can a standardized protocol allow empirically verified hot-swapping of LLM controllers with no control-stack changes at 16.9 Hz, while maintaining the real-time performance required for embodied, physically grounded interaction?}
 \end{quote}
 
 \section{Hypotheses}
@@ -27,9 +27,9 @@ To evaluate this question, we test the following hypotheses:
 \end{enumerate}
 
 \section{Novelty vs. Integration}
-While individual components such as Graph Neural Networks and the Robot Operating System are well-established, this work provides a novel \textbf{protocol-centric synthesis}. Unlike existing bespoke integrations (e.g., SayCan), this is the first implementation of an MCP-to-ROS~2 bridge that integrates a relational reasoning layer and learned forward dynamics as standardized protocol "Tools." This work advances the field by moving from platform-specific VLA models to platform-agnostic, protocol-driven agents.
+While individual components such as Graph Neural Networks and the Robot Operating System are well-established, this work provides a novel \textbf{protocol-centric synthesis} of a GNN reasoner and a forward dynamics model as standardized tools. Unlike existing bespoke integrations (e.g., SayCan), this is the first implementation of an MCP-to-ROS~2 bridge that integrates a relational reasoning layer and learned forward dynamics as standardized protocol "Tools." This work advances the field by moving from platform-specific VLA models to platform-agnostic, protocol-driven agents.
 
-We hypothesize that the Model Context Protocol (MCP), originally designed to bridge AI models with digital tools, can be adapted as a standardized, runtime-agnostic interface for robotics to solve the $N \times M$ integration crisis by treating robotic skills as swappable, network-accessible tools \cite{lee_robot_2025}.
+We hypothesize that the Model Context Protocol (MCP), originally designed to bridge AI models with digital tools, can be adapted as a standardized, runtime-agnostic interface for robotics to demonstrate feasibility for a class of bimanual manipulation scenarios by treating robotic skills as swappable, network-accessible tools \cite{lee_robot_2025}.
 
 \section{Contributions}
 

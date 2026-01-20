@@ -39,25 +39,21 @@ Safe deployment of non-deterministic agents requires mechanisms to predict the p
 
 Given a sequence of proposed tool invocations, the model performs a "mental rollout" to forecast future world states $G_{t+1}$. By achieving a state-prediction error of $\delta = 0.0017$, this component operates as a \textbf{Physicality Filter}. It allows the MCP bridge to veto agent-generated commands that lead to kinematically impossible or unsafe system configurations, providing an interpretable audit trail of safety decisions within the protocol logs \cite{lee_robot_2025, roth_learned_2025}.
 
-\section{Related Work and Comparative Positioning}
-
-A growing body of work explores the integration of foundation models with robotics. Systems like \textit{SayCan} \cite{saycan2022} and \textit{RT-2} \cite{rt22023} demonstrate that LLMs can produce long-horizon plans. However, these are often tightly coupled to proprietary APIs or lack explicit safety verification loops. Table~\ref{tab:related-work-comparison} contrasts AI2MCP with these existing frameworks.
+\section{Related Work and Positioning}
+We classify LLM-robot integrations into three paradigms: \textit{End-to-End} (e.g., RT-2), \textit{Code-as-Policies}, and our proposed \textit{Protocol-Driven} approach. Table~\ref{tab:comparison} situates AI2MCP within this landscape.
 
 \begin{table}[htbp]
 \centering
 \caption{Comparative Analysis of Embodied AI Integration Frameworks}
-\label{tab:related-work-comparison}
+\label{tab:comparison}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{lccccr}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{System} & \textbf{Protocol} & \textbf{Safety Layer} & \textbf{Swappability} & \textbf{Abstraction} & \textbf{Reasoning} \\
+\textbf{System} & \textbf{Protocol} & \textbf{Safety Verification} & \textbf{Hot-swappability} & \textbf{Reasoning} \\
 \midrule
-SayCan \cite{saycan2022} & Proprietary & Affordance-based & Low & Task-Specific & Language \\
-RT-2 \cite{rt22023} & None & Probabilistic & None & Monolithic VLA & Multimodal \\
-RCP (Draft) \cite{lee_robot_2025} & RCP & Static Rules & Medium & Middleware & Variable \\
-Modular ROS 2 \cite{macenski2022ros2} & DDS/C++ & Hand-coded Rules & Low & Hardware-Centric & Deterministic \\
-\midrule
-\textbf{AI2MCP (Ours)} & \textbf{MCP (Std.)} & \textbf{Sim-Verification} & \textbf{High (Hot-swap)} & \textbf{Tool-Centric} & \textbf{Kinematic GNN} \\
+SayCan \cite{saycan2022} & Proprietary & Affordance-based & Low & Language \\
+RT-2 \cite{rt22023} & None & Probabilistic & None & Multimodal \\
+\textbf{AI2MCP (Ours)} & \textbf{MCP (Std.)} & \textbf{Sim-Verification} & \textbf{High} & \textbf{Kinematic GNN} \\
 \bottomrule
 \end{tabular}}
 \end{table}

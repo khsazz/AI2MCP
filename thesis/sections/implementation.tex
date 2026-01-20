@@ -40,28 +40,11 @@ The protocol layer is built upon the official MCP Python SDK and the Starlette A
 
 \subsection{Transport Layer and Starlette Integration}
 
-A significant implementation challenge involved the routing of POST messages in the SSE transport. Initial attempts to use Starlette's \texttt{Route} class failed due to the transport's requirement for a raw ASGI app interface. This was resolved by utilizing the \texttt{Mount} directive to correctly delegate POST traffic to the MCP SDK \cite{pan_experiences_2025, chhetri_model_2025, ayyagari_model_2025}.
-
-\begin{lstlisting}[language=Python, caption={Starlette SSE Mount Implementation}]
-from mcp.server.sse import SseServerTransport
-from starlette.applications import Starlette
-from starlette.routing import Mount
-
-class MCPRos2Server:
-    def create_app(self) -> Starlette:
-        self.sse_transport = SseServerTransport("/messages")
-        # Critical fix: Using Mount instead of Route for ASGI delegation
-        return Starlette(
-            routes=[
-                Mount("/messages", app=self.sse_transport.handle_post_message),
-                Route("/sse", endpoint=self.handle_sse),
-            ]
-        )
-\end{lstlisting}
+A significant design decision involved the routing of POST messages in the SSE transport. We opted for the \texttt{Mount} directive over Starlette's standard \texttt{Route} class to correctly delegate POST traffic to the MCP SDK's ASGI interface. This ensures robust handling of the bidirectional message flow required for tool execution. The specific implementation details are provided in \Cref{app:implementation-details}.
 
 \subsection{Consolidated Handler Pattern}
 
-Due to internal API changes in the MCP SDK, a \textbf{Consolidated Handler Pattern} was implemented. Rather than individual decorators for each capability, the server employs centralized \texttt{list\_tools} and \texttt{call\_tool} handlers that route requests to specialized modules (\texttt{motion}, \texttt{perception}, \texttt{prediction}). Specifically, the \texttt{PredictionToolsManager} now handles advanced reasoning calls, including \texttt{simulate\_action} for pre-execution verification and \texttt{project\_future} for temporal state estimation. This ensures architectural resilience and simplifies the registration of the 14 tools and 13 resources available in the AI2MCP ecosystem.
+To maintain architectural resilience against MCP SDK updates, a \textbf{Consolidated Handler Pattern} was implemented. Rather than individual decorators for each capability, the server employs centralized \texttt{list\_tools} and \texttt{call\_tool} handlers. This design centralizes the routing logic, allowing for cleaner separation between the protocol layer and the domain-specific logic modules (\texttt{motion}, \texttt{perception}, \texttt{prediction}).
 
 \section{Robotic Integration and State Abstraction}
 

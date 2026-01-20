@@ -10,7 +10,13 @@ This chapter delineates the architectural design of the MCP-to-ROS~2 bridge and 
 \section{System Architecture and Theoretical Design}
 \label{sec:system-architecture}
 
-The architecture implements a multi-layered data flow designed to resolve the $N \times M$ integration problem \cite{zeng_m3llm_2025}. As illustrated in \Cref{fig:architecture}, the system is partitioned into four primary functional layers, ensuring that modifications to the AI ``brain'' or the robotic ``body'' do not require a full-stack reconfiguration \cite{liskova_cps-based_2025, imran_safety-critical_2025, zhou_multi-robot_2022}:
+The architecture implements a multi-layered data flow designed to resolve the $N \times M$ integration problem \cite{zeng_m3llm_2025}. As illustrated in \Cref{fig:architecture}, the system is partitioned into two primary control loops:
+\begin{itemize}
+    \item \textbf{Reflexive Loop (ROS 2)}: Operates at $>100$ Hz, handling hardware stability, joint-level actuation, and sensor fusion via DDS.
+    \item \textbf{Cognitive Loop (MCP)}: Operates at $\sim16.9$ Hz, handling high-level reasoning, tool selection, and semantic state estimation via JSON-RPC.
+\end{itemize}
+
+This separation ensures that modifications to the AI ``brain'' or the robotic ``body'' do not require a full-stack reconfiguration \cite{liskova_cps-based_2025, imran_safety-critical_2025, zhou_multi-robot_2022}:
 
 \begin{figure}[htbp]
     \centering
@@ -27,6 +33,8 @@ The architecture implements a multi-layered data flow designed to resolve the $N
 \end{enumerate}
 
 \subsection{Design Principles for Decoupled Control}
+
+We chose the Model Context Protocol (MCP) over direct ROS~2 APIs to ensure the agent remains agnostic to DDS-level message structures, preventing 'callback bloat' at the cognitive layer. Furthermore, we utilize a GNN over a standard MLP because GNNs provide inherent permutation invariance over the joint-chain entities, ensuring the model generalizes to different arm configurations.
 
 Our architecture adheres to three primary design principles to operationalize swappable intelligence:
 \begin{description}
@@ -94,7 +102,7 @@ Given a robot state vector $\mathbf{s} \in \mathbb{R}^{14}$ (representing the AL
 \begin{equation}
     \mathbf{x}_i = [x_i, y_i, z_i, \theta_i, t_i]
 \end{equation}
-where $(x, y, z)$ is the 3D position, $\theta$ is the joint angle, and $t$ is a one-hot joint type encoding.
+where $(x, y, z)$ is the 3D position, $\theta$ is the joint angle, and $t$ is a one-hot joint type encoding. The input to the network is a set of 16 nodes (14 joints + 2 gripper bases), and the output is a set of 9 binary predicates for each edge in the fully connected graph.
 
 \subsection{Message Passing and Global Feature Conditioning (GFC)}
 The architecture employs three GATv2 layers with residual connections. To accurately predict interaction predicates (e.g., \texttt{is\_holding}), we utilize \textbf{Global Feature Conditioning}, concatenating the global robot state $\mathbf{u}$ (e.g., gripper aperture) into the predicate head:
@@ -137,7 +145,8 @@ As shown in \Cref{fig:design_latency}, the Kinematic-GNN's $16\times$ speed adva
 \section{Safety Verification via Forward Dynamics}
 \label{sec:forward-dynamics}
 
-To address LLM non-determinism, a \textbf{ForwardDynamicsModel} performs rollouts to verify plans \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, molnar_model-free_2021, liang_point_2025, imran_safety-critical_2025}.
+To address LLM non-determinism, a \textbf{ForwardDynamicsModel} performs rollouts to verify plans \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, molnar_model-free_2021, liang_point_2025, imran_safety-critical_2025}. The Forward Dynamics Model acts as a 'Physicality Filter,' predicting future states with an error of $\delta = 0.0017$. It intercepts commands that lead to kinematically impossible states, returning a 'REPLAN' recommendation to the LLM agent.
+
 \begin{equation}
     [G_{t+1}, c] = \text{DynamicsNet}(G_t, a_t)
 \end{equation}

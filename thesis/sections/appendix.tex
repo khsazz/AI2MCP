@@ -2,6 +2,31 @@
 % Appendix
 % ============================================================================
 
+\chapter{Implementation Details}
+\label{app:implementation-details}
+
+\section{Starlette SSE Mount Implementation}
+To resolve POST message routing issues in the Server-Sent Events (SSE) transport, we utilized the Starlette \texttt{Mount} directive to correctly delegate traffic to the MCP SDK's handle\_post\_message app.
+
+The following implementation demonstrates the use of the \texttt{Mount} directive to integrate the MCP SSE transport with Starlette.
+
+\begin{lstlisting}[language=Python, caption={Starlette SSE Mount Implementation}]
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.routing import Mount
+
+class MCPRos2Server:
+    def create_app(self) -> Starlette:
+        self.sse_transport = SseServerTransport("/messages")
+        # Critical fix: Using Mount instead of Route for ASGI delegation
+        return Starlette(
+            routes=[
+                Mount("/messages", app=self.sse_transport.handle_post_message),
+                Route("/sse", endpoint=self.handle_sse),
+            ]
+        )
+\end{lstlisting}
+
 \chapter{MCP Message Examples}
 \label{app:mcp-messages}
 
