@@ -217,9 +217,10 @@
 
 **Key Thesis Claims**:
 - MCP solves N×M integration problem
-- GNN provides structured relational understanding (99.4% accuracy)
+- GNN provides structured relational understanding (98.99% pass@1, 95.15% F1)
 - ⚠️ Vision integration does NOT improve accuracy (RelationalGNN wins)
 - Swappable AI brain validated (Llama3.2 + Qwen2.5 → MCP → GNN E2E)
+- Real-time viable: 17.8ms inference latency (mean)
 
 ---
 
@@ -631,7 +632,8 @@ These are documented for future researchers, not part of current thesis:
 | ~~Fix MultiModalGNN accuracy~~ | ~~High~~ | ✅ DONE (96.51% on 55k) |
 | ~~Train MultiModalGNN on 55k~~ | ~~High~~ | ✅ DONE (31 min, fixed OOM) |
 | ~~Run fair comparison~~ | ~~High~~ | ✅ DONE — **RelationalGNN WINS** |
-| Generate final thesis figures | High | ✅ DONE (28 PNGs) |
+| Generate final thesis figures | High | ✅ DONE (28 PNGs, remote-trained model) |
+| Re-run benchmark with remote model | High | ✅ DONE (98.99% pass@1, 95.15% F1) |
 | **Revise thesis Results chapter** | **High** | ⬜ **CRITICAL** (outdated claims) |
 
 ### Post-Thesis (Phase 10)

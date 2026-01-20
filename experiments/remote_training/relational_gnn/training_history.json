@@ -1,5 +1,5 @@
 {
-  "profile": "RTX 500 Ada (4GB)",
+  "profile": "RTX 3070 (8GB) - Remote Training",
   "epochs": 100,
   "total_time_seconds": 1730.9707889556885,
   "best_val_loss": 0.035356949044250734,
@@ -413,5 +413,6 @@
       1.0737692253231258e-06,
       1e-06
     ]
-  }
+  },
+  "note": "Trained on cip7g1.cip.cs.fau.de, 55k ALOHA frames"
 }

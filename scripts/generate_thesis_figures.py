@@ -736,8 +736,8 @@ def main():
     parser.add_argument(
         "--benchmark",
         type=Path,
-        default=Path("experiments/benchmark_with_trained_model.json"),
-        help="Path to benchmark results JSON",
+        default=Path("experiments/benchmark_remote_model.json"),
+        help="Path to benchmark results JSON (from remote-trained model)",
     )
     args = parser.parse_args()
     

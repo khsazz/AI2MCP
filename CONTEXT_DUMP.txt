@@ -242,20 +242,36 @@ scheduler: CosineAnnealingLR
 weight_decay: 1e-5
 
 [INFERENCE_BENCHMARKS]
+# Updated: 2026-01-18 with remote-trained model
 data_source: lerobot/aloha_static_coffee
-frames_processed: 100
-device: cuda (RTX 500 Ada)
+model: experiments/remote_training/relational_gnn/best_model.pt
+frames_processed: 500
+device: cpu (local benchmark with RTX 3070-trained model)
+
 timing_metrics_ms:
-  inference_latency_mean: 14.41
-  inference_latency_p95: 18.45
-  graph_construction_mean: 1.86
-  graph_construction_p95: 2.27
-  serialization_mean: 0.60
-  serialization_p95: 1.54
-  total_request_mean: 28.60
-  total_request_p95: 38.63
-protocol_overhead: 49.6% (includes dataset I/O)
-first_call_latency: 893ms (CUDA warmup)
+  inference_latency_mean: 17.83
+  inference_latency_p95: 32.19
+  graph_construction_mean: 4.11
+  graph_construction_p95: 8.73
+  serialization_mean: 0.26
+  serialization_p95: 0.38
+  total_request_mean: 42.88
+  total_request_p95: 75.72
+protocol_overhead: 58.4%
+
+accuracy_metrics:
+  pass@1: 0.9899 (98.99%)
+  pass@3: 0.9995 (99.95%)
+  pass@5: 0.9995 (99.95%)
+  pass@10: 0.9995 (99.95%)
+  
+predicate_classification:
+  accuracy: 0.9846 (98.46%)
+  precision: 0.9113 (91.13%)
+  recall: 0.9954 (99.54%)
+  f1: 0.9515 (95.15%)
+
+benchmark_file: experiments/benchmark_remote_model.json
 
 [MCP_E2E_DEMO_RESULTS]
 tools_discovered: 13
