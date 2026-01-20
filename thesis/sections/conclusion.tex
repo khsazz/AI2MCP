@@ -14,7 +14,7 @@ The key technical contributions of this work are as follows:
 \begin{enumerate}
     \item \textbf{MCP-ROS~2 Bridge Architecture}: We developed a production-ready middleware layer that abstracts ROS~2 capabilities into 13 standardized \textit{Tools} and 13 \textit{Resources}. This architecture enables any MCP-compatible AI model to orchestrate complex robotic behaviors through a unified JSON-RPC interface \cite{grey_understanding_2025}.
     
-    \item \textbf{RelationalGNN Reasoning Engine}: We implemented a Graph Attention Network (GATv2) that converts raw 14-DoF kinematic streams into structured spatial predicates with \textbf{97.03\%} validation accuracy. This engine enables AI models to perceive the world in terms of semantic relationships rather than metric coordinates.
+    \item \textbf{Kinematic-GNN Reasoning Engine}: We implemented a Graph Attention Network (GATv2) that converts raw 14-DoF kinematic streams into structured spatial predicates with \textbf{97.03\%} validation accuracy. This engine enables AI models to perceive the world in terms of semantic relationships rather than metric coordinates.
     
     \item \textbf{Pre-Execution Safety Guardrails}: We established a ``Physicality Filter'' using a learned Forward Dynamics Model. This system enables pre-execution verification of LLM-generated plans with a state-prediction error of $\delta = 0.0017$, significantly reducing the risks associated with non-deterministic agentic control.
     

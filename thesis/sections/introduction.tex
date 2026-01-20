@@ -22,7 +22,7 @@ This thesis investigates a fundamental challenge in robotic interoperability thr
 To evaluate this question, we test the following hypotheses:
 \begin{enumerate}
     \item \textbf{Decoupling Success}: A standardized MCP-to-ROS~2 bridge allows for the hot-swapping of local models (Llama 3.2 vs. Qwen 2.5) with zero modifications to the robotic control stack while maintaining a task success rate ($Pass@1$) $\geq 90\%$.
-    \item \textbf{Representation Efficiency}: A RelationalGNN operating solely on 14-DoF kinematic streams provides sufficient semantic grounding for spatial predicates, achieving higher inference speeds than multimodal vision stacks without a statistically significant loss in accuracy.
+    \item \textbf{Representation Efficiency}: A Kinematic-GNN operating solely on 14-DoF kinematic streams provides sufficient semantic grounding for spatial predicates, achieving higher inference speeds than multimodal vision stacks without a statistically significant loss in accuracy.
     \item \textbf{Protocol Viability}: The JSON-RPC over SSE transport layer provides sufficient throughput ($\geq 15$ ops/sec) to support interactive agent-robot dialogue in non-reflexive manipulation tasks.
 \end{enumerate}
 
@@ -38,7 +38,7 @@ This work addresses the architectural fragmentation of embodied AI through the f
 \begin{enumerate}
     \item \textbf{MCP-to-ROS 2 Bridge Architecture}: A novel middleware layer that translates robotic capabilities into 13 standardized \textit{Tools} (actions) and 13 \textit{Resources} (state) within a protocol-driven interface, allowing any MCP-compatible AI model to control ROS 2-based robots without bespoke integration.
     
-    \item \textbf{RelationalGNN for Predicate Prediction}: A \textbf{Relational Graph Neural Network (RelationalGNN)} that converts raw 14-DoF joint-specific kinematic streams into structured spatial predicates, achieving \textbf{97.03\%} classification accuracy to provide AI models with structured environmental understanding~\cite{huang_planning_2022}.
+    \item \textbf{Kinematic-GNN for Predicate Prediction}: A \textbf{Kinematic Graph Neural Network (Kinematic-GNN)} that converts raw 14-DoF joint-specific kinematic streams into structured spatial predicates, achieving \textbf{97.03\%} classification accuracy to provide AI models with structured environmental understanding~\cite{huang_planning_2022}.
     
     \item \textbf{Predictive Safety Guardrails via Learned Forward Dynamics}: A learned dynamics model that performs pre-execution rollouts to verify the physical feasibility of AI-generated plans, acting as a ``Physicality Filter'' at the protocol level with a state-prediction error of $\delta = 0.0017$ \cite{roth_learned_2025}.
     
@@ -56,7 +56,7 @@ The remainder of this thesis is organized as follows:
 \begin{description}
     \item[Chapter~\ref{ch:background}] provides the theoretical foundations of the Model Context Protocol, the Robot Operating System 2 (ROS 2), and Graph Neural Networks (GNNs), alongside a critical review of related work in LLM-robot integration.
     
-    \item[Chapter~\ref{ch:methodology}] presents the architectural design of the MCP-ROS 2 bridge and the RelationalGNN model, detailing the mapping of robotic affordances to standardized tools, the implementation of Global Feature Conditioning (GFC), and the spatiotemporal reasoning engine.
+    \item[Chapter~\ref{ch:methodology}] presents the architectural design of the MCP-ROS 2 bridge and the Kinematic-GNN model, detailing the mapping of robotic affordances to standardized tools, the implementation of Global Feature Conditioning (GFC), and the spatiotemporal reasoning engine.
     
     \item[Chapter~\ref{ch:implementation}] describes the technical implementation details, including the SSE transport layer, the GNN reasoning engine, and the RAM pre-computation strategy that enabled a 730$\times$ training speedup.
     

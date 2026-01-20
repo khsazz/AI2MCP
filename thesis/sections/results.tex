@@ -18,17 +18,17 @@ Evaluations were benchmarked on two primary profiles: a high-performance develop
 \section{Relational Reasoning Performance}
 
 \subsection{Global Predicate Accuracy}
-The RelationalGNN reasoning engine achieved a validation accuracy of \textbf{97.03\%} during training. As illustrated in \Cref{fig:training-curves}, the model exhibits rapid convergence with minimal loss variance, reaching optimal performance by epoch 69.
+The Kinematic-GNN reasoning engine achieved a validation accuracy of \textbf{97.03\%} during training. As illustrated in \Cref{fig:training-curves}, the model exhibits rapid convergence with minimal loss variance, reaching optimal performance by epoch 69.
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.9\textwidth]{figures/training_curves.png}
-    \caption{RelationalGNN training on 55,000 ALOHA frames showing high stability in both loss convergence and micro-accuracy.}
+    \caption{Kinematic-GNN training on 55,000 ALOHA frames showing high stability in both loss convergence and micro-accuracy.}
     \label{fig:training-curves}
 \end{figure}
 
 \subsection{Inference Benchmark Results}
-The trained RelationalGNN was evaluated on a 500-frame holdout set, demonstrating substantial improvements over locally-trained baselines. Table~\ref{tab:inference-benchmark} summarizes the inference performance.
+The trained Kinematic-GNN was evaluated on a 500-frame holdout set, demonstrating substantial improvements over locally-trained baselines. Table~\ref{tab:inference-benchmark} summarizes the inference performance.
 
 \begin{table}[htbp]
 \centering

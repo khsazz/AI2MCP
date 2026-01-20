@@ -72,8 +72,8 @@ The bridge manages high-frequency state updates through a decentralized subscrip
 
 \section{Neural Reasoning Engine Implementation}
 
-\subsection{RelationalGNN with GFC}
-The RelationalGNN utilizes \texttt{GATv2Conv} layers from PyTorch Geometric. A key feature is the integration of \textbf{Global Feature Conditioning (GFC)} within the \texttt{PredicateHead}. By concatenating the global state vector $\mathbf{u}$ (gripper aperture) with the edge embeddings, the model enables accurate prediction of interaction-heavy predicates like \texttt{is\_holding} \cite{schlichtkrull_modeling_2017}.
+\subsection{Kinematic-GNN (RelationalGNN)}
+The Kinematic-GNN (implemented as class \texttt{RelationalGNN}) utilizes \texttt{GATv2Conv} layers from PyTorch Geometric. A key feature is the integration of \textbf{Global Feature Conditioning (GFC)} within the \texttt{PredicateHead}. By concatenating the global state vector $\mathbf{u}$ (gripper aperture) with the edge embeddings, the model enables accurate prediction of interaction-heavy predicates like \texttt{is\_holding} \cite{schlichtkrull_modeling_2017}.
 
 \subsection{Forward Dynamics and Auto-loading Logic}
 The \texttt{ForwardDynamicsModel} (259K parameters) is implemented to predict future world graphs $G_{t+1}$ based on a 14-DoF action vector. A critical feature of the server is its \textbf{Auto-loading Logic}, which allows the system to automatically detect and load the most accurate available model. At initialization, the server inspects the \texttt{experiments/remote\_training/} directory, prioritizing the full 55,000-frame checkpoint over local minimal versions. The logic includes state-dict key inspection to ensure compatibility with the external GNN encoder. This enables the \texttt{simulate\_action} tool to provide high-fidelity safety recommendations with minimal configuration.

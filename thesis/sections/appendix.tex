@@ -123,7 +123,7 @@ The full robot has 14 DoF (7 per arm), with indices 0-6 for the left arm and 7-1
 
 \begin{table}[htbp]
 \centering
-\caption{RelationalGNN hyperparameters}
+\caption{Kinematic-GNN hyperparameters}
 \label{tab:hyperparameters}
 \begin{tabular}{lc}
 \toprule
@@ -166,7 +166,7 @@ pip install -e ".[dev]"
 \section{Training}
 
 \begin{lstlisting}[language=bash]
-# Train RelationalGNN on full ALOHA dataset (55k frames)
+# Train Kinematic-GNN on full ALOHA dataset (55k frames)
 python scripts/train_relational_gnn.py \
     --repo lerobot/aloha_static_coffee \
     --epochs 100 \

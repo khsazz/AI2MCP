@@ -5,7 +5,7 @@
 \chapter{Methodology}
 \label{ch:methodology}
 
-This chapter delineates the architectural design of the MCP-to-ROS~2 bridge and the RelationalGNN reasoning engine. By synthesizing standardized communication protocols with graph-based relational learning, this framework provides a substrate for decoupling high-level robotic intelligence from physical actuation while ensuring safety through pre-execution simulation \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, liang_point_2025}.
+This chapter delineates the architectural design of the MCP-to-ROS~2 bridge and the Kinematic-GNN reasoning engine. By synthesizing standardized communication protocols with graph-based relational learning, this framework provides a substrate for decoupling high-level robotic intelligence from physical actuation while ensuring safety through pre-execution simulation \cite{roth_learned_2025, nguyen_model-free_2024, fisac_general_2017, liang_point_2025}.
 
 \section{System Architecture and Theoretical Design}
 \label{sec:system-architecture}
@@ -23,7 +23,7 @@ The architecture implements a multi-layered data flow designed to resolve the $N
     \item \textbf{Cognitive Reasoning Layer}: Houses cloud-hosted or local Large Language Models (e.g., Qwen 2.5, Llama 3.2) that generate action plans and process semantic graph feedback \cite{fu_rosbag_2025, taghian_explainability_2024, zhou_multi-robot_2022}.
     \item \textbf{Protocol Abstraction Layer}: An MCP stack utilizing Server-Sent Events (SSE) and JSON-RPC~2.0 transport to expose robot affordances through a standardized interface \cite{fu_rosbag_2025, liskova_cps-based_2025}. 
     \item \textbf{Robotic Integration Layer (Bridge)}: A stateful intermediary that translates MCP tool calls into ROS~2 topics, services, and actions.
-    \item \textbf{Geometric Reasoning Layer}: A RelationalGNN reasoning engine that transforms raw 14-DoF kinematic streams into structured spatial predicates.
+    \item \textbf{Geometric Reasoning Layer}: A Kinematic-GNN reasoning engine that transforms raw 14-DoF kinematic streams into structured spatial predicates.
 \end{enumerate}
 
 \subsection{Design Principles for Decoupled Control}
@@ -78,16 +78,16 @@ Resources provide read-only access to robot and environment states via semantic 
 \midrule
 \texttt{robot://pose} & Current Cartesian position ($x, y, z$) and orientation ($\theta$) \\
 \texttt{robot://status} & Connectivity and movement status flags \\
-\texttt{robot://world\_graph} & Full RelationalGNN scene graph (JSON) \\
+\texttt{robot://world\_graph} & Full Kinematic-GNN scene graph (JSON) \\
 \texttt{robot://lerobot/predicates} & Current list of active semantic predicates \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{RelationalGNN Architecture}
+\section{Kinematic-GNN Architecture}
 \label{sec:relational-gnn-arch}
 
-The RelationalGNN processes kinematic states into relational predicates, enabling conceptual planning rather than raw coordinate manipulation \cite{taghian_explainability_2024, zuo_graph-based_2021, chen_relgnn_2025, zhou_multi-robot_2022, jiang_learning_2024}.
+The Kinematic-GNN processes kinematic states into relational predicates, enabling conceptual planning rather than raw coordinate manipulation \cite{taghian_explainability_2024, zuo_graph-based_2021, chen_relgnn_2025, zhou_multi-robot_2022, jiang_learning_2024}.
 
 \subsection{Graph Construction}
 Given a robot state vector $\mathbf{s} \in \mathbb{R}^{14}$ (representing the ALOHA system), we construct a graph $G = (V, E)$. Node features $\mathbf{x}_i$ are derived from forward kinematics:
@@ -111,7 +111,7 @@ To mitigate predicate flickering caused by sensor noise, we implement a \textbf{
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\textwidth]{figures/stgnn_architecture.png}
-    \caption{Spatiotemporal GNN architecture: Integration of GRU layers with the RelationalGNN to ensure proactive temporal stability.}
+    \caption{Spatiotemporal GNN architecture: Integration of GRU layers with the Kinematic-GNN to ensure proactive temporal stability.}
     \label{fig:stgnn}
 \end{figure}
 
@@ -146,11 +146,11 @@ The bridge uses the predicted world graph $G_{t+1}$ and confidence $c$ to reject
 \section{Predicate Definitions}
 \label{sec:predicate-definitions}
 
-The RelationalGNN predicts nine binary predicates organized into two categories. These form the basis for the agent's environmental understanding.
+The Kinematic-GNN predicts nine binary predicates organized into two categories. These form the basis for the agent's environmental understanding.
 
 \begin{table}[htbp]
 \centering
-\caption{Predicate definitions for the RelationalGNN engine}
+\caption{Predicate definitions for the Kinematic-GNN engine}
 \label{tab:predicate-definitions}
 \begin{tabular}{lll}
 \toprule
