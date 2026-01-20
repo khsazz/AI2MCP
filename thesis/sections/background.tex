@@ -9,63 +9,58 @@ This chapter presents the theoretical and technical foundations underpinning thi
 
 \section{The Model Context Protocol (MCP)}
 
-The Model Context Protocol (MCP) is an emerging open standard for mediating interaction between AI models and external tools, services, and data resources. By defining a unified, bi-directional communication interface---typically instantiated via JSON-RPC 2.0\cite{wang_towards_2025}---MCP enables interoperability across heterogeneous ecosystems and decouples model-centric reasoning from system-specific implementation details \cite{lee_robot_2025}. 
+The Model Context Protocol (MCP) is an open standard designed to facilitate seamless communication between Large Language Models (LLMs) and external data sources or tools. Traditionally, AI agents required bespoke connectors for every unique API, leading to the $N \times M$ integration problem characterized in Chapter 1. MCP standardizes this interaction through a JSON-RPC 2.0 based transport layer, typically implemented over Server-Sent Events (SSE) \cite{wang_towards_2025, chhetri_model_2025}.
 
-MCP adopts a three-tier architecture comprising a \emph{Host} (e.g., an LLM-based application), a \emph{Client} (the transport layer), and a \emph{Server} (the gateway exposing tools and resources). Within this architecture, primitives such as \emph{Tools}, \emph{Resources}, and \emph{Prompts} provide an abstraction layer over concrete capabilities, allowing AI agents to invoke functionality without assuming a particular runtime or hardware configuration. Recent work positions MCP as a general-purpose ``tool bus'' for robotic cognition, in which agentic planners discover and invoke robot capabilities dynamically via semantic URIs \cite{lee_robot_2025}. 
-
-In the context of protocol-driven robotics, MCP serves as the model-adjacent interface that exposes robot affordances in a standardized, auditable form. This thesis leverages MCP to support swappable intelligence: different foundation models can be attached to the same physical system without modifying the underlying control stack, as long as they comply with the shared protocol.\cite{wang_towards_2025}
+\subsection{Standardization and Maturity}
+While MCP is an emerging standard, its adoption as a "de facto" bridge for AI-driven tool use is accelerating due to its runtime-agnostic design \cite{lee_robot_2025, patil_model_2025}. Unlike previous proprietary interfaces, MCP provides a "universal plug" that allows an AI model to discover hardware capabilities dynamically. While proposals like the \textit{Robot Context Protocol} (RCP) represent the future of multi-tenant robotic control, MCP currently offers the most mature software development kit (SDK) for grounding foundation models in digital and physical tools \cite{lee_robot_2025, chhetri_model_2025}. This thesis commits to MCP as the primary interface to ensure the architecture is compatible with the rapidly evolving ecosystem of "agentic" AI applications.
 
 \section{Robot Operating System 2 (ROS~2)}
 
-The Robot Operating System 2 (ROS~2) is the de facto middleware standard for contemporary robotic systems, providing real-time, distributed communication over a Data Distribution Service (DDS) backbone \cite{gambo_systematic_2025}. ROS~2 standardizes intra-robot messaging through \emph{Topics} (publish--subscribe), \emph{Services} (request--response), and \emph{Actions} (long-running, goal-oriented interactions), thereby offering a unified abstraction over heterogeneous sensors, actuators, and controllers.
+The Robot Operating System 2 (ROS~2) is the industry-standard middleware for contemporary robotic systems, providing real-time, distributed communication over a Data Distribution Service (DDS) backbone \cite{gambo_systematic_2025, macenski2022ros2}. ROS~2 standardizes intra-robot messaging through \emph{Topics}, \emph{Services}, and \emph{Actions}, thereby offering a unified abstraction over heterogeneous hardware.
 
-While ROS~2 is highly effective as a hardware-adjacent execution layer, it does not natively provide high-level, model-facing interfaces suitable for non-deterministic AI  \cite{pistilli_graph_2023, lee_robot_2025}. As a consequence, integration with external planners or large language models typically proceeds via bespoke, platform-specific bridges that are brittle, difficult to reuse, and challenging to audit from a safety perspective \cite{wirkus_online_2020}. 
-
-In this work, ROS~2 is treated as the low-level execution substrate responsible for real-time control, state dissemination, and device management. The proposed MCP--ROS~2 bridge then functions as a protocol-level adaptor: it exposes ROS~2 capabilities as MCP Tools and Resources, enabling agentic planning to interact with the robot through a standardized interface while preserving ROS~2's real-time guarantees. This separation of concerns is central to achieving hardware-agnostic, swappable intelligence.
+A central challenge in ROS~2 is the high barrier to entry for cloud-based AI models, which typically lack the native environments required to interact with DDS topics. Integration traditionally proceeds via platform-specific bridges that are brittle and difficult to reuse \cite{wirkus_online_2020}. In this work, the proposed MCP--ROS~2 bridge functions as a protocol-level adaptor: it exposes ROS~2 capabilities as standardized Tools and Resources, enabling agentic planners to interact with the robot through a unified interface while preserving the 100+ Hz reflexive control loops required for hardware stability \cite{fu_rosbag_2025, liskova_cps-based_2025}.
 
 \section{Relational Reasoning with Graph Neural Networks}
 
-Graph Neural Networks (GNNs) are a class of neural architectures designed to operate on graph-structured data, providing a natural relational inductive bias and permutation invariance over entities and their interactions \cite{huang_planning_2022}. For robotic manipulation, such relational structure is critical: the physical relationship between, for example, a gripper and an object is often more informative for planning than their absolute poses in a global reference frame \cite{rabino_modern_2024, velickovic_everything_2023, lin_efficient_2021}. 
+Relational reasoning is a cornerstone of human-like physical intelligence. Graph Neural Networks (GNNs) generalize deep learning to graph-structured data, providing a natural relational inductive bias over entities and their interactions \cite{huang_planning_2022, zuo_graph-based_2021}.
 
-GNNs implement relational reasoning via iterative message passing on a graph whose nodes represent entities (e.g., joints, links, or objects) and whose edges encode spatial or semantic relationships. A generic message-passing update can be written as
-\begin{equation}
-h^{(l+1)}_v = \phi \left( h^{(l)}_v, \bigoplus_{u \in N(v)} \psi\big(h^{(l)}_v, h^{(l)}_u, e_{uv}\big) \right),
-\end{equation}
-where $h^{(l)}_v$ is the representation of node $v$ at layer $l$, $N(v)$ is the neighborhood of $v$, $e_{uv}$ encodes edge features, $\psi$ is the message function, $\phi$ is the update function, and $\bigoplus$ is a permutation-invariant aggregation operator (e.g., sum, mean, or max). 
+\subsection{Mapping Kinematics to Semantic Graphs}
+Our reasoning methodology involves transforming a 14-Degree-of-Freedom (DoF) joint state vector $\mathbf{s}$ into a directed graph $G = (V, E)$. 
+\begin{itemize}
+    \item \textbf{Nodes} $V$: Comprise $N=16$ entities (7 joints per bimanual arm plus 2 end-effectors).
+    \item \textbf{Edges} $E$: Encode kinematic chain connections and spatial proximity.
+    \item \textbf{Predicates}: The model predicts $K=9$ binary spatial and interaction predicates for each edge, such as \texttt{is\_near} and \texttt{is\_left\_of}.
+\end{itemize}
+By grounding agentic planning in these structured predicates rather than raw coordinates, the system can reason about contact and reachability with a validation accuracy of \textbf{97.03\%} \cite{chen_relgnn_2025}.
 
-Within protocol-driven robotics, this thesis employs a relational GNN to transform high-throughput kinematic streams into structured spatial predicates that are consumable by LLM-based planners\cite{velickovic_everything_2023, lin_efficient_2021}. By grounding agentic planning in relational state representations derived from raw sensor data, the system can reason about contact, reachability, occlusion, and other geometric constraints that are essential for safe and effective physical interaction \cite{lin_efficient_2021, miao_semantic_2023}.
+\section{Forward Dynamics and the Physicality Filter}
 
-\section{Forward Dynamics and Physical Verification}
+Safe deployment of non-deterministic agents requires mechanisms to predict the physical consequences of actions prior to execution \cite{fisac_general_2017, roth_learned_2025}. This thesis introduces a learned **Forward Dynamics Model** as a novel protocol-level safety primitive. 
 
-Safe embodied deployment of non-deterministic agents requires mechanisms to predict and evaluate the physical consequences of candidate action sequences prior to execution. Forward dynamics models and context-aware controllers play a key role in this process by forecasting future world states under proposed control inputs and identifying trajectories that violate kinematic, dynamic, or safety constraints \cite{roth_learned_2025, schneider_semantic_2025}.
+Given a sequence of proposed tool invocations, the model performs a "mental rollout" to forecast future world states $G_{t+1}$. By achieving a state-prediction error of $\delta = 0.0017$, this component operates as a \textbf{Physicality Filter}. It allows the MCP bridge to veto agent-generated commands that lead to kinematically impossible or unsafe system configurations, providing an interpretable audit trail of safety decisions within the protocol logs \cite{lee_robot_2025, roth_learned_2025}.
 
-This thesis integrates a learned Forward Dynamics Model into the MCP-based middleware as a protocol-level safety primitive. Given the current relational state and a sequence of proposed tool invocations, the model predicts future system configurations and flags trajectories that are physically implausible or unsafe. In effect, this component operates as a ``physicality filter'' within the protocol layer: it intercepts and vetoes agent-generated commands that would violate joint limits, self-collision constraints, or workspace safety regions \cite{lee_robot_2025}. This design aligns predictive simulation with protocol-level logging, providing both pre-execution verification and an interpretable audit trail of safety decisions.
+\section{Related Work and Comparative Positioning}
 
-\section{Related Work}
-
-A growing body of work explores the integration of large foundation models with robotic systems. Approaches such as \textit{SayCan} and \textit{RT-2} demonstrate that LLMs and vision-language models can be grounded in robot affordances to produce semantically meaningful, long-horizon plans in real environments\cite{wang_towards_2025}. However, these systems are typically tightly coupled to specific hardware platforms, task domains, or proprietary APIs, limiting their portability and making systematic safety auditing more difficult.
-
-In parallel, emerging protocol proposals such as the \textit{Robot Context Protocol} (RCP) highlight a shift toward runtime-agnostic, middleware-independent abstractions for multi-tenant robotic control \cite{lee_robot_2025}. These efforts aim to formalize the interface between cognitive agents and physical systems, but often do not yet incorporate explicit structures for relational reasoning or forward dynamics-based verification.
-
-Complementary strands of research investigate semantic belief graphs, knowledge-graph-based task planning, and scene graph representations as foundations for long-term, memory-aware manipulation \cite{ginting_safe_2023, miao_long-term_2023}. These works underscore the importance of structured, graph-based state representations for robust plan generation and adaptation over extended horizons \cite{lin_efficient_2021, chen_overview_2023}.
-
-This thesis builds directly on these foundations by (i) embedding a reasoning-capable relational GNN layer within a standardized, model-facing protocol framework, and (ii) coupling that framework to a learned forward dynamics component that provides protocol-level physicality checks. Together, these elements advance the goal of protocol-driven robotics by enabling swappable intelligence, structured relational state, and predictive safety guardrails within a single, unified middleware architecture.
+A growing body of work explores the integration of foundation models with robotics. Systems like \textit{SayCan} \cite{saycan2022} and \textit{RT-2} \cite{rt22023} demonstrate that LLMs can produce long-horizon plans. However, these are often tightly coupled to proprietary APIs or lack explicit safety verification loops. Table~\ref{tab:related-work-comparison} contrasts AI2MCP with these existing frameworks.
 
 \begin{table}[htbp]
 \centering
 \caption{Comparative Analysis of Embodied AI Integration Frameworks}
 \label{tab:related-work-comparison}
-\resizebox{\textwidth}{!}{% % This line forces the table to fit within the page width
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lccccr}
 \toprule
 \textbf{System} & \textbf{Protocol} & \textbf{Safety Layer} & \textbf{Swappability} & \textbf{Abstraction} & \textbf{Reasoning} \\
 \midrule
-SayCan \cite{saycan2022} & Proprietary & Affordance & Low & Task-Specific & Language \\
+SayCan \cite{saycan2022} & Proprietary & Affordance-based & Low & Task-Specific & Language \\
 RT-2 \cite{rt22023} & None & Probabilistic & None & Monolithic VLA & Multimodal \\
 RCP (Draft) \cite{lee_robot_2025} & RCP & Static Rules & Medium & Middleware & Variable \\
-Modular ROS 2 & DDS/C++ & Hand-coded & Low & Hardware-Centric & Deterministic \\
+Modular ROS 2 \cite{macenski2022ros2} & DDS/C++ & Hand-coded Rules & Low & Hardware-Centric & Deterministic \\
 \midrule
 \textbf{AI2MCP (Ours)} & \textbf{MCP (Std.)} & \textbf{Sim-Verification} & \textbf{High (Hot-swap)} & \textbf{Tool-Centric} & \textbf{Kinematic GNN} \\
 \bottomrule
 \end{tabular}}
 \end{table}
+
+\subsection{Novelty and Technical Synthesis}
+The novelty of this work lies in the synthesis of a relational reasoning layer and learned forward dynamics as standardized protocol "Tools." While previous works have implemented bespoke GNN reasoning for manipulation \cite{huang_planning_2022, lin_efficient_2021}, this is the first implementation of an MCP-to-ROS~2 bridge that enables **hot-swappable intelligence** while maintaining a throughput of **16.9 operations per second**. This advances the field from platform-specific control to a platform-agnostic, protocol-driven paradigm.
